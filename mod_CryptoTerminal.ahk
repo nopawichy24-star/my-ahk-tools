@@ -6,7 +6,6 @@
 ; AHK v2 / single-file module
 ; Trigger:
 ;   - Triple tap Q quickly
-;   - Ctrl + Alt + T
 ; ============================================================
 
 ; ----------------------------
@@ -22,7 +21,7 @@ CT["panelShown"]         := false
 CT["widgetShown"]        := false
 CT["alertsEnabled"]      := false
 
-CT["refreshMs"] := 2000
+CT["refreshMs"] := 12000
 CT["cacheMs"]   := 8000
 CT["alertMs"]   := 10000
 
@@ -49,14 +48,6 @@ CT["iniPath"]            := A_ScriptDir "\CryptoTerminal.ini"
 
 ; widget controls
 CT["ctrl"]               := Map()
-
-; ----------------------------
-; PUBLIC INIT
-; ----------------------------
-CryptoTerminal_Init() {
-    Hotkey("^!t", CT_OpenPanel)
-    OnMessage(0x201, CT_DragWidget) ; WM_LBUTTONDOWN
-}
 
 ; ----------------------------
 ; HOTKEY: Triple tap Q
@@ -291,44 +282,64 @@ CT_UpdateWidget(*) {
         return
 
     data := CT_GetMarketData()
+    failed := !data["ok"]
 
-    CT_RenderLine("btc",  "🟠 BTC",     data["btc"],     0, "USD")
-    CT_RenderLine("eth",  "🔵 ETH",     data["eth"],     0, "USD")
-    CT_RenderLine("sol",  "🟣 SOL",     data["sol"],     0, "USD")
-    CT_RenderLine("gold", "🥇 GOLD",    data["gold"],    2, "USD")
-    CT_RenderLine("jpy",  "💴 JPY/THB", data["jpythb"],  4, "")
-    CT_RenderLine("usd",  "💵 USD/JPY", data["usdjpy"],  2, "")
+    CT_RenderLine("btc",  "🟠 BTC",     data["btc"],     0, "USD", failed)
+    CT_RenderLine("eth",  "🔵 ETH",     data["eth"],     0, "USD", failed)
+    CT_RenderLine("sol",  "🟣 SOL",     data["sol"],     0, "USD", failed)
+    CT_RenderLine("gold", "🥇 GOLD",    data["gold"],    2, "USD", failed)
+    CT_RenderLine("jpy",  "💴 JPY/THB", data["jpythb"],  4, "",    failed)
+    CT_RenderLine("usd",  "💵 USD/JPY", data["usdjpy"],  2, "",    failed)
 
-    sparkBTC := CT_UpdateHistoryAndSpark("btc", data["btc"])
-    sparkETH := CT_UpdateHistoryAndSpark("eth", data["eth"])
-    sparkSOL := CT_UpdateHistoryAndSpark("sol", data["sol"])
+    if (failed) {
+        CT["ctrl"]["mcap"].Text := "💰 TOTAL MCAP  ⚠️ N/A"
+    } else {
+        sparkBTC := CT_UpdateHistoryAndSpark("btc", data["btc"])
+        sparkETH := CT_UpdateHistoryAndSpark("eth", data["eth"])
+        sparkSOL := CT_UpdateHistoryAndSpark("sol", data["sol"])
 
-    CT["ctrl"]["btcSpark"].Text := "   " sparkBTC
-    CT["ctrl"]["ethSpark"].Text := "   " sparkETH
-    CT["ctrl"]["solSpark"].Text := "   " sparkSOL
+        CT["ctrl"]["btcSpark"].Text := "   " sparkBTC
+        CT["ctrl"]["ethSpark"].Text := "   " sparkETH
+        CT["ctrl"]["solSpark"].Text := "   " sparkSOL
 
-    CT["ctrl"]["mcap"].Text := "💰 TOTAL MCAP  " CT_FormatTrillions(data["total_mcap"])
+        CT["ctrl"]["mcap"].Text := "💰 TOTAL MCAP  " CT_FormatTrillions(data["total_mcap"])
+    }
 
-    ; update title timestamp subtly
-    CT["ctrl"]["title"].Text := "╭─ 📊 MARKET  " FormatTime(, "HH:mm:ss") " ───────────╮"
+    ; update title timestamp subtly + แจ้งเตือนถ้าดึงข้อมูลไม่ได้
+    CT["ctrl"]["title"].Text := failed
+        ? "╭─ ⚠️ MARKET (เชื่อมต่อไม่ได้)  " FormatTime(, "HH:mm:ss") " ─╮"
+        : "╭─ 📊 MARKET  " FormatTime(, "HH:mm:ss") " ───────────╮"
 }
 
-CT_RenderLine(key, label, value, decimals := 0, currency := "") {
+CT_RenderLine(key, label, value, decimals := 0, currency := "", failed := false) {
     global CT
 
     ctrlKey := key
+
+    if !(CT["ctrl"].Has(ctrlKey) && IsObject(CT["ctrl"][ctrlKey]))
+        return
+
+    ctrl := CT["ctrl"][ctrlKey]
+
+    ; ---------- FETCH FAILED: โชว์ warning แทนเลข 0 และไม่แตะ baseline เดิม ----------
+    if (failed) {
+        ctrl.Text := label "  ⚠️ N/A"
+        CT_FlashControl(ctrl, "FFCC66")
+        return
+    }
+
     prevMap := CT["lastData"]
-prevVal := prevMap.Has(key) ? prevMap[key] : value
+    prevVal := prevMap.Has(key) ? prevMap[key] : value
 
-; ensure openPrice map exists
-if !CT.Has("openPrice")
-    CT["openPrice"] := Map()
+    ; ensure openPrice map exists
+    if !CT.Has("openPrice")
+        CT["openPrice"] := Map()
 
-; set open price once
-if !CT["openPrice"].Has(key)
-    CT["openPrice"][key] := value
+    ; set open price once
+    if !CT["openPrice"].Has(key)
+        CT["openPrice"][key] := value
 
-open := CT["openPrice"][key]
+    open := CT["openPrice"][key]
 
     percent := 0
     if (open != 0)
@@ -340,15 +351,11 @@ open := CT["openPrice"][key]
 
     ; ---------- PRICE DIRECTION ----------
     arrow := "⚪—"
-    color := "FFFFFF"
 
-    if (value > prevVal) {
+    if (value > prevVal)
         arrow := "🟢▲"
-        color := "7CFC90"
-    } else if (value < prevVal) {
+    else if (value < prevVal)
         arrow := "🔴▼"
-        color := "FF8A8A"
-    }
 
     prevMap[key] := value
 
@@ -358,18 +365,13 @@ open := CT["openPrice"][key]
         ? label "  $" formatted "  " pctText "  " arrow
         : label "  " formatted "  " pctText "  " arrow
 
-    if CT["ctrl"].Has(ctrlKey) && IsObject(CT["ctrl"][ctrlKey]) {
+    ctrl.Text := line
 
-        ctrl := CT["ctrl"][ctrlKey]
-
-        ctrl.Text := line
-
-        ; ---------- COLOR BASED ON DAILY % ----------
-        if (percent > 0)
-            CT_FlashControl(ctrl, "7CFC90")
-        else if (percent < 0)
-            CT_FlashControl(ctrl, "FF8A8A")
-    }
+    ; ---------- COLOR BASED ON DAILY % ----------
+    if (percent > 0)
+        CT_FlashControl(ctrl, "7CFC90")
+    else if (percent < 0)
+        CT_FlashControl(ctrl, "FF8A8A")
 }
 
 CT_FlashControl(ctrl, color) {
@@ -447,6 +449,7 @@ CT_UpdateHistoryAndSpark(key, value) {
 CT_GetMarketData() {
 
     data := Map()
+    data["ok"] := true
 
     try {
 
@@ -479,6 +482,7 @@ CT_GetMarketData() {
 
     } catch {
 
+        data["ok"] := false
         data["btc"] := 0
         data["eth"] := 0
         data["sol"] := 0
