@@ -38,7 +38,20 @@ F1::Send("^x")
 F2::Send("^c")
 F3::Send("^v")
 F4::Send("^z")
-F5::Send("^s")
+; F5 = Save แต่ต้องกด 2 ครั้งติดกัน (ภายใน 400ms) ถึงจะ save จริง กันกดโดนโดยไม่ตั้งใจ
+F5PressCount := 0
+F5:: {
+    global F5PressCount
+
+    F5PressCount++
+
+    if (F5PressCount >= 2) {
+        F5PressCount := 0
+        Send("^s")
+    } else {
+        SetTimer(() => F5PressCount := 0, -400)
+    }
+}
 F6::Send("#+s")
 F7::Send "{Delete}"
 F8::WinClose("A")
