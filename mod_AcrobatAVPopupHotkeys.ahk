@@ -172,83 +172,23 @@ SC00A:: (ClickMultiStep_NoMove(K9), MoveMouseToEnd())
 
 #SingleInstance Force
 
-DOUBLE_MS := 350
-
-plusCount := 0
-minusCount := 0
-
 #HotIf WinActive("ahk_exe EXCEL.EXE")
 
-NumpadAdd::
+; ปุ่มข้างเมาส์ (ปุ่ม Back) = เขียนเลข 1 ลงคอลัมน์ Q ของแถวที่กำลังเลือกอยู่
+; ไม่เลื่อน/ไม่เปลี่ยนตำแหน่งหน้าจอ Excel — ใช้งานได้เฉพาะตอนโฟกัส Excel เท่านั้น
+; นอกเหนือจากนี้ปุ่มจะกลับไปเป็นปุ่มย้อนกลับตามปกติ
+XButton1::
 {
-    global plusCount, DOUBLE_MS
-
-    plusCount++
-
-    SetTimer HandlePlus, -DOUBLE_MS
-}
-
-NumpadSub::
-{
-    global minusCount, DOUBLE_MS
-
-    minusCount++
-
-    SetTimer HandleMinus, -DOUBLE_MS
-}
-
-HandlePlus()
-{
-    global plusCount
-
     try
     {
         xl := ComObjActive("Excel.Application")
-
-        if (plusCount = 2)
-        {
-            ; เพิ่มเฉพาะช่วงที่เลือก
-            xl.Selection.Insert()
-        }
-        else if (plusCount >= 3)
-        {
-            ; เพิ่มทั้งแถว
-            xl.ActiveCell.EntireRow.Insert()
-        }
+        row := xl.ActiveCell.Row
+        xl.Range("Q" row).Value := 1
     }
     catch
     {
         MsgBox "ไม่พบ Excel ที่กำลังทำงานอยู่"
     }
-
-    plusCount := 0
-}
-
-HandleMinus()
-{
-    global minusCount
-
-    try
-    {
-        xl := ComObjActive("Excel.Application")
-
-        if (minusCount = 2)
-        {
-            ; ลบเฉพาะช่วงที่เลือก
-            xl.Selection.Delete()
-        }
-        else if (minusCount >= 3)
-        {
-            ; ลบทั้งแถว
-            xl.ActiveCell.EntireRow.Delete()
-        }
-    }
-    catch
-    {
-        MsgBox "ไม่พบ Excel ที่กำลังทำงานอยู่"
-    }
-
-    minusCount := 0
 }
 
 #HotIf
