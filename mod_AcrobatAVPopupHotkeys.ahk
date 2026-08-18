@@ -191,4 +191,20 @@ XButton1::
     }
 }
 
+; ปุ่มข้างเมาส์ (ปุ่ม Forward) = ลบค่าออกจากคอลัมน์ Q ของแถวที่กำลังเลือกอยู่
+; (ย้อนสิ่งที่ XButton1 เขียนไว้) เงื่อนไข/ขอบเขตเหมือนกับ XButton1 ทุกประการ
+XButton2::
+{
+    try
+    {
+        xl := ComObjActive("Excel.Application")
+        row := xl.ActiveCell.Row
+        xl.Range("Q" row).Value := ""
+    }
+    catch
+    {
+        MsgBox "ไม่พบ Excel ที่กำลังทำงานอยู่"
+    }
+}
+
 #HotIf
