@@ -253,61 +253,13 @@ ShutdownCancel() {
 SC137::Send("^a")
 
 ; ===============================
-; SC070: เปิด JyoumonEngine + เมนู パーツリスト
+; SC070: เปิดไฟล์รายชื่อฝ่ายขาย (営業(ひら))
 ; ===============================
-global KROSS_PENDING := false
-
 SC070:: {
-    global KROSS_PENDING
+    path := "C:\Users\U004797\Desktop\販売管理\連絡\営業(ひら).pdf"
 
-    if (KROSS_PENDING) {
-        KROSS_PENDING := false
-        SetTimer(OpenKross, 0)
-
-        Send "^f"
-        return
-    }
-
-    KROSS_PENDING := true
-    SetTimer(OpenKross, -350)
-}
-
-OpenKross() {
-    global KROSS_PENDING
-
-    if !KROSS_PENDING
-        return
-
-    KROSS_PENDING := false
-
-    url := "https://pl.kato-ps.com/KATO/"
-
-    Run 'msedge.exe --new-window "' . url . '"'
-
-    WinWaitActive "ahk_exe msedge.exe", , 5
-
-    WinActivate "ahk_exe msedge.exe"
-    WinSetAlwaysOnTop 1, "ahk_exe msedge.exe"
-    WinMaximize "ahk_exe msedge.exe"
-    Sleep 800
-    WinSetAlwaysOnTop 0, "ahk_exe msedge.exe"
-
-    Send "{Tab 3}"
-    Sleep 50
-    Send "{Enter}"
-    Sleep 1000
-
-    Send "{Tab 10}"
-    Sleep 100
-    Send "{Enter}"
-    Sleep 500
-
-    Send "{Tab 23}"
-    Sleep 200
-    SendText "ﾊﾟｰﾂﾘｽﾄ"
-    Sleep 200
-    Send "{Tab 2}"
-    Sleep 400
-
-    Click 1281, 405
+    if FileExist(path)
+        Run(path)
+    else
+        MsgBox("หาไฟล์ไม่เจอ:`n" path)
 }

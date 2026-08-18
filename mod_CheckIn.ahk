@@ -1,7 +1,6 @@
 ﻿; mod_Checkln.ahk
 
 global lastRunDate := ""
-global progPath := "C:\Program Files (x86)\NEC\Obbligato III\R4.3\Client\OBLClientLoader.exe"
 
 global g_IsLoggingIn := false
 global g_LastActiveHwnd := 0
@@ -170,31 +169,16 @@ LaunchApps() {
 
 
 ;----------------------------------------
-; AppsKey = OPEN PROGRAM + LOGIN
+; AppsKey = เปิดไฟล์ผังที่นั่ง (座席表)
 ;----------------------------------------
 AppsKey:: {
 
-    global progPath, g_IsLoggingIn
+    path := "C:\Users\U004797\Desktop\販売管理\連絡\本社3F 座席表 260806.pdf"
 
-    g_IsLoggingIn := true
-
-    Run progPath
-
-    Sleep 1500
-
-    WinActivate "A"
-
-    Sleep 500
-
-    Send "Audi4797"
-    Sleep 200
-    Send "{Enter}"
-
-    Sleep 1000
-
-    Send "{Enter}"
-
-    g_IsLoggingIn := false
+    if FileExist(path)
+        Run(path)
+    else
+        MsgBox("หาไฟล์ไม่เจอ:`n" path)
 }
 
 
