@@ -177,6 +177,8 @@ SC00A:: (ClickMultiStep_NoMove(K9), MoveMouseToEnd())
 ; ปุ่มข้างเมาส์ (ปุ่ม Back) = เขียนเลข 1 ลงคอลัมน์ Q ของแถวที่กำลังเลือกอยู่
 ; ไม่เลื่อน/ไม่เปลี่ยนตำแหน่งหน้าจอ Excel — ใช้งานได้เฉพาะตอนโฟกัส Excel เท่านั้น
 ; นอกเหนือจากนี้ปุ่มจะกลับไปเป็นปุ่มย้อนกลับตามปกติ
+; กดครั้งเดียว = เขียนเลข 1 ที่ Q ของแถวนั้น
+; กด 2 ครั้งติดกันเร็ว ๆ (ภายใน 400ms, แถวเดียวกัน) = คัดลอกช่วง S:Y ของแถวนั้นเพิ่ม
 XButton1::
 {
     try
@@ -184,6 +186,9 @@ XButton1::
         xl := ComObjActive("Excel.Application")
         row := xl.ActiveCell.Row
         xl.Range("Q" row).Value := 1
+
+        if (A_PriorHotkey = "XButton1" && A_TimeSincePriorHotkey <= 400)
+            xl.Range("S" row ":Y" row).Copy()
     }
     catch
     {
