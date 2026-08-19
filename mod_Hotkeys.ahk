@@ -543,8 +543,19 @@ SC137::Send("^a")
 SC070:: {
     path := "C:\Users\U004797\Desktop\販売管理\連絡\営業(ひら).pdf"
 
-    if FileExist(path)
-        Run(path)
-    else
+    if !FileExist(path) {
         MsgBox("หาไฟล์ไม่เจอ:`n" path)
+        return
+    }
+
+    ; เปิดเป็นหน้าต่าง Edge ใหม่แยกจากแท็บ/หน้าต่างที่เปิดอยู่ แล้ว maximize ทันที
+    Run('msedge.exe --new-window "' path '"')
+
+    if WinWaitActive("ahk_exe msedge.exe", , 5) {
+        WinActivate("ahk_exe msedge.exe")
+        WinSetAlwaysOnTop(1, "ahk_exe msedge.exe")
+        WinMaximize("ahk_exe msedge.exe")
+        Sleep(800)
+        WinSetAlwaysOnTop(0, "ahk_exe msedge.exe")
+    }
 }
