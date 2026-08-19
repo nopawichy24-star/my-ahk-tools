@@ -77,8 +77,9 @@ SaveMousePos() {
 
 RestoreMousePos() {
     global g_SavedMouseX, g_SavedMouseY
-    if !WinActive("ahk_group AcrobatApps")
-        return
+    ; ไม่เช็ค WinActive ตรงนี้ (ต่างจาก MoveMouseToEnd เดิม) เพราะจุดประสงค์คือ
+    ; คืนเมาส์กลับให้ผู้ใช้เสมอไม่ว่า Acrobat จะยังโฟกัสอยู่หรือไม่ตอนคลิกเสร็จ
+    ; ถ้าเช็คแล้วบังเอิญ false ช่วงนั้นพอดี จะไม่คืนตำแหน่งให้เลยแบบเงียบ ๆ
     CoordMode("Mouse", "Screen")
     MouseMove(g_SavedMouseX, g_SavedMouseY, 0)
 }

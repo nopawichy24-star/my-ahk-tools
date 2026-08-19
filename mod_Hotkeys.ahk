@@ -218,7 +218,13 @@ F6_StartOCR() {
         Sleep(100)
 
         result := OCR.FromRect(x, y, w, h, {lang: "ja-JP", scale: 2})
-        text := Trim(result.Text)
+
+        try
+            text := F6_BuildOcrText(result)
+        catch
+            text := result.Text  ; เผื่อโครงสร้างผลลัพธ์ไม่ตรงที่คาด ให้ fallback ไปใช้ของ library ตรง ๆ
+
+        text := Trim(text)
 
         if (text = "") {
             TrayTip("OCR", "ไม่พบข้อความในพื้นที่ที่เลือก", 3)
@@ -238,6 +244,39 @@ F6_StartOCR() {
             fw.Destroy()
         F6_OCRBusy := false
     }
+}
+
+; ต่อข้อความ OCR เองจาก Lines/Words แทนการใช้ result.Text ตรง ๆ
+; เพราะ result.Text ของ library เว้นวรรคระหว่างทุกคำเท่ากันหมด ทำให้ภาษาญี่ปุ่น/คำที่ควร
+; ติดกันถูกแยกออกจากกันเป็นระยะ ๆ ผิดธรรมชาติ ฟังก์ชันนี้เว้นวรรคเฉพาะตอนที่ระยะห่างจริง ๆ
+; ระหว่างคำ (ตามพิกัด x) กว้างกว่าเกณฑ์เทียบกับความสูงตัวอักษรเท่านั้น
+F6_BuildOcrText(result) {
+    outLines := []
+
+    for line in result.Lines {
+        text := ""
+        prevRight := 0
+        prevH := 0
+
+        for i, w in line.Words {
+            if (i > 1) {
+                gap := w.x - prevRight
+                if (gap > prevH * 0.35)
+                    text .= " "
+            }
+            text .= w.Text
+            prevRight := w.x + w.w
+            prevH := w.h
+        }
+
+        outLines.Push(text)
+    }
+
+    out := ""
+    for i, t in outLines
+        out .= (i = 1 ? "" : "`n") t
+
+    return out
 }
 
 ; อัปเดตกรอบไกด์ทุกจอให้ตรงกับ selection (X,Y,W,H เป็นพิกัดจอรวม) แบ่งเป็นท่อนตามจอ
