@@ -86,12 +86,16 @@ F6_RunOriginal() {
 ;
 ; หมายเหตุเรื่องหลายจอ/DPI ไม่เท่ากัน:
 ; - shield และกรอบไกด์แยกเป็น "1 หน้าต่างต่อ 1 จอจริง" เสมอ (ไม่มีหน้าต่างไหนคาบเกี่ยว 2 จอ)
-;   กัน Windows auto-scale หน้าต่างผิดตอนคาบเกี่ยวจอที่ DPI/scale ไม่เท่ากัน
+;   กัน Windows auto-scale หน้าต่างผิดตอนคาบเกี่ยวจอที่ DPI/scale ไม่เท่ากัน รองรับพิกัดติดลบ
+;   ได้เองอยู่แล้วเพราะใช้เลขจริงเทียบ Max/Min ตลอด ไม่มีจุดไหน assume จอหลักอยู่ที่ (0,0)
 ; - เดิมเคยลองวาดกรอบด้วย XOR ตรงบน screen DC (GetDC(0)) แต่พบว่าพอลากยาว/ข้ามรอยต่อจอ
 ;   กรอบเพี้ยนเป็นทาง ๆ ได้ เพราะ DWM (compositor) วาดทับพื้นที่นั้นแทรกระหว่างที่กรอบยังค้างอยู่
-;   ทำให้ตอน XOR ลบไม่ตรงกับของเดิมที่วาดไว้ -> เปลี่ยนกลับมาใช้หน้าต่างจริง (ให้ DWM
-;   compositor จัดการวาดให้เอง ไม่มีปัญหาเพี้ยนแบบนี้) แต่ตัดปัญหาเก่าด้วยการตัดกรอบเป็น
-;   ท่อนตามจอ แล้ว clip ให้แต่ละท่อนอยู่ในจอเดียวเท่านั้น
+; - เดิมเคยลองหน้าต่างกรอบแบบ layered+transparent (WinSetTransparent) แต่กลับกลายเป็นบั๊ก
+;   ใหม่: ลืมเรียก WinSetTransparent ตอนสร้างบางจุด ทำให้กรอบมองไม่เห็นเป็นพัก ๆ - จริง ๆ
+;   กรอบนี้ไม่จำเป็นต้องโปร่งใสเลย แค่ "กลวงตรงกลาง" ด้วย SetWindowRgn ก็พอ เลยตัด
+;   layered/transparency ออกทั้งหมด ให้เป็นหน้าต่างสีเทาธรรมดา ลดจุดที่จะบั๊กได้
+; - shield (ดักคลิก มองไม่เห็น) ยังคงโปร่งใสเหมือนเดิม แต่แยกเป็นคนละชุด Gui object
+;   กับกรอบ (frames) อย่างชัดเจน ไม่ปนกัน
 ; ===============================
 global F6_OCRBusy := false
 
@@ -118,7 +122,7 @@ F6_StartOCR() {
         }
 
         ; shield: 1 หน้าต่างต่อจอ ดักคลิก/ลากทั้งหมดไว้เอง ไม่ให้หลุดไปโดนหน้าต่างเบื้องหลัง
-        ; (มองไม่เห็น แต่ยังรับคลิกอยู่ - ไม่ใช่ click-through)
+        ; (มองไม่เห็น แต่ยังรับคลิกอยู่ - ไม่ใช่ click-through) ใช้ layered+transparent ตามเดิม
         for m in monitors {
             sg := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08080000")
             sg.BackColor := "000000"
@@ -127,17 +131,12 @@ F6_StartOCR() {
             shields.Push(sg)
         }
 
-        ; frame: หน้าต่างกรอบไกด์บาง ๆ สีเทา 1 อันต่อจอ (สร้างไว้ก่อน ซ่อนไว้ก่อน)
-        ; ตำแหน่ง/ขนาด/รูปทรงของแต่ละอันจะถูกคำนวณใหม่ทุกครั้งที่ลาก ให้ "ท่อน" ที่อยู่บนจอนั้น ๆ เท่านั้น
-        ; หมายเหตุบั๊กที่แก้: หน้าต่างนี้มี WS_EX_LAYERED (+E...20) แต่ก่อนหน้านี้ไม่เคยเรียก
-        ; WinSetTransparent เลย - หน้าต่าง layered ที่ไม่เคยตั้ง transparency จะไม่ถูกวาด/มองไม่เห็น
-        ; เลยทั้งที่โค้ดส่วนอื่นถูกต้องหมด ("Hide" ก็ไม่ใช่ option จริงของ .Show() เลยเปลี่ยนไปใช้
-        ; .Hide() ตรง ๆ แทนหลังสร้างเสร็จ)
+        ; frame: หน้าต่างกรอบไกด์สีเทาธรรมดา 1 อันต่อจอ (ไม่ใช้ layered/transparency เลย
+        ; ไม่จำเป็นสำหรับกรอบกลวง - ลดจุดที่จะพลาดจนกรอบมองไม่เห็น) NOACTIVATE เฉย ๆ กันแย่ง focus
         for m in monitors {
-            fw := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08080020")
-            fw.BackColor := "B0B0B0"
+            fw := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08000000")
+            fw.BackColor := "808080"
             fw.Show("x0 y0 w1 h1 NoActivate")
-            WinSetTransparent(230, fw)
             fw.Hide()
             frames.Push(fw)
             frameVisible.Push(false)
@@ -180,19 +179,17 @@ F6_StartOCR() {
 
             if (!hasFrame || x != lastX || y != lastY || w != lastW || h != lastH) {
                 F6_UpdateFrames(monitors, frames, frameVisible, x, y, w, h, 2)
-                ToolTip(w " x " h " px", cx + 16, cy + 16)  ; บอกขนาดที่ลากอยู่ตอนนี้ ติดไปกับเคอร์เซอร์
                 hasFrame := true
                 lastX := x, lastY := y, lastW := w, lastH := h
             }
             Sleep(8)
         }
 
-        ToolTip()  ; เอา tooltip ขนาดออกทันทีที่ปล่อยเมาส์
-
         MouseGetPos(&x2, &y2)
 
+        ; ปล่อยเมาส์/ยกเลิกแล้ว - ซ่อนกรอบทุกจอทันที (ใช้ .Hide() จริง ไม่ใช่ Show("Hide"))
         for fw in frames
-            fw.Show("Hide")
+            fw.Hide()
 
         if (cancelled) {
             TrayTip("OCR", "ยกเลิกแล้ว", 2)
@@ -297,8 +294,9 @@ F6_UpdateFrames(monitors, frames, frameVisible, X, Y, W, H, T) {
         ox2 := Min(X + W, m.r), oy2 := Min(Y + H, m.b)
 
         if (ox2 <= ox1 || oy2 <= oy1) {
+            ; selection ออกจากจอนี้แล้ว (ไม่มีส่วนทับเหลืออยู่เลย) - ซ่อนกรอบของจอนี้
             if frameVisible[i] {
-                frames[i].Show("Hide")
+                frames[i].Hide()
                 frameVisible[i] := false
             }
             continue
@@ -598,13 +596,13 @@ SC070:: {
     }
 
     ; เปิดเป็นหน้าต่าง Edge ใหม่แยกจากแท็บ/หน้าต่างที่เปิดอยู่ แล้ว maximize ทันที
+    ; รอแค่ให้หน้าต่างมีอยู่จริง (WinWait) ไม่รอ OS สลับ focus ให้ (WinWaitActive)
+    ; และตัด AlwaysOnTop + Sleep(800) ที่เหลือจากโค้ดเก่าออก เพราะไม่มีผลต่อความเร็วเปิดไฟล์
+    ; มีแต่ทำให้หน่วงเพิ่มโดยไม่จำเป็น
     Run('msedge.exe --new-window "' path '"')
 
-    if WinWaitActive("ahk_exe msedge.exe", , 5) {
+    if WinWait("ahk_exe msedge.exe", , 5) {
         WinActivate("ahk_exe msedge.exe")
-        WinSetAlwaysOnTop(1, "ahk_exe msedge.exe")
         WinMaximize("ahk_exe msedge.exe")
-        Sleep(800)
-        WinSetAlwaysOnTop(0, "ahk_exe msedge.exe")
     }
 }
