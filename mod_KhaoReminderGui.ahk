@@ -275,9 +275,13 @@ KhaoRem_OnContextMenu(LV, RowNumber, IsRightClick, X, Y) {
     ; ไม่มีอะไรเกิดขึ้นเลย
     CoordMode("Menu", "Screen")
 
-    menu := Menu()
-    menu.Add("🗑 ลบรายการนี้", (*) => KhaoRem_DeleteItem(id))
-    menu.Show(X, Y)
+    ; ห้ามตั้งชื่อตัวแปรนี้ว่า "menu" - AHK v2 ไม่สนตัวพิมพ์เล็ก/ใหญ่ของชื่อ ดังนั้นตัวแปร local
+    ; ชื่อ menu จะบัง built-in class "Menu" ทั้งฟังก์ชัน แม้แต่ฝั่งขวาของบรรทัดที่ประกาศเอง
+    ; ทำให้ Menu() ทางขวามือถูกตีความเป็นการเรียกตัวแปร menu (ที่ยังไม่มีค่า) แทนที่จะเป็นการสร้าง
+    ; Menu object ใหม่ - นี่คือสาเหตุจริงของ error "local variable has not been assigned a value"
+    ctxMenu := Menu()
+    ctxMenu.Add("🗑 ลบรายการนี้", (*) => KhaoRem_DeleteItem(id))
+    ctxMenu.Show(X, Y)
 }
 
 KhaoRem_DeleteItem(id) {

@@ -595,14 +595,7 @@ SC070:: {
         return
     }
 
-    ; เปิดเป็นหน้าต่าง Edge ใหม่แยกจากแท็บ/หน้าต่างที่เปิดอยู่ แล้ว maximize ทันที
-    ; รอแค่ให้หน้าต่างมีอยู่จริง (WinWait) ไม่รอ OS สลับ focus ให้ (WinWaitActive)
-    ; และตัด AlwaysOnTop + Sleep(800) ที่เหลือจากโค้ดเก่าออก เพราะไม่มีผลต่อความเร็วเปิดไฟล์
-    ; มีแต่ทำให้หน่วงเพิ่มโดยไม่จำเป็น
-    Run('msedge.exe --new-window "' path '"')
-
-    if WinWait("ahk_exe msedge.exe", , 5) {
-        WinActivate("ahk_exe msedge.exe")
-        WinMaximize("ahk_exe msedge.exe")
-    }
+    ; ใช้ Acrobat.exe ตรง ๆ แทน Edge (เร็วกว่า - ไม่ต้องรอเปิดเบราว์เซอร์) ผ่าน helper
+    ; ตัวเดียวกับ AppsKey ใน mod_CheckIn.ahk (OpenPdfInAcrobat) กันโค้ดซ้ำ
+    OpenPdfInAcrobat(path)
 }
