@@ -85,10 +85,13 @@ F6_RunOriginal() {
 ; -> ไม่มีรูปภาพหลงเหลือใน Clipboard/Clipboard History เลย (ต่างจากกด F6 ครั้งเดียวที่ยังเก็บภาพเหมือนเดิม)
 ;
 ; หมายเหตุเรื่องหลายจอ/DPI ไม่เท่ากัน:
-; - shield แยกเป็น "1 หน้าต่างต่อ 1 จอจริง" (ไม่ใช่หน้าต่างเดียวคลุมทุกจอ) กัน Windows
-;   auto-scale หน้าต่างผิดตอนหน้าต่างคาบเกี่ยวจอที่ DPI/scale ไม่เท่ากัน
-; - กรอบไกด์ไม่ใช้หน้าต่างเลย แต่วาดเส้น XOR ตรงบน screen DC ตามพิกัดเมาส์จริง ๆ
-;   (GetDC(0) + Rectangle) จึงไม่มีการ scale ของหน้าต่างมาเกี่ยวข้อง ตรงพิกเซลกับเมาส์เป๊ะทุกจอ
+; - shield และกรอบไกด์แยกเป็น "1 หน้าต่างต่อ 1 จอจริง" เสมอ (ไม่มีหน้าต่างไหนคาบเกี่ยว 2 จอ)
+;   กัน Windows auto-scale หน้าต่างผิดตอนคาบเกี่ยวจอที่ DPI/scale ไม่เท่ากัน
+; - เดิมเคยลองวาดกรอบด้วย XOR ตรงบน screen DC (GetDC(0)) แต่พบว่าพอลากยาว/ข้ามรอยต่อจอ
+;   กรอบเพี้ยนเป็นทาง ๆ ได้ เพราะ DWM (compositor) วาดทับพื้นที่นั้นแทรกระหว่างที่กรอบยังค้างอยู่
+;   ทำให้ตอน XOR ลบไม่ตรงกับของเดิมที่วาดไว้ -> เปลี่ยนกลับมาใช้หน้าต่างจริง (ให้ DWM
+;   compositor จัดการวาดให้เอง ไม่มีปัญหาเพี้ยนแบบนี้) แต่ตัดปัญหาเก่าด้วยการตัดกรอบเป็น
+;   ท่อนตามจอ แล้ว clip ให้แต่ละท่อนอยู่ในจอเดียวเท่านั้น
 ; ===============================
 global F6_OCRBusy := false
 
@@ -102,18 +105,35 @@ F6_StartOCR() {
 
     CoordMode("Mouse", "Screen")
 
+    monitors := []
     shields := []
+    frames := []
+    frameVisible := []
 
     try {
-        ; shield: 1 หน้าต่างต่อจอ ดักคลิก/ลากทั้งหมดไว้เอง ไม่ให้หลุดไปโดนหน้าต่างเบื้องหลัง
-        ; (มองไม่เห็น แต่ยังรับคลิกอยู่ - ไม่ใช่ click-through)
         Loop MonitorGetCount() {
             MonitorGet(A_Index, &mL, &mT, &mR, &mB)
+            monitors.Push({l: mL, t: mT, r: mR, b: mB})
+        }
+
+        ; shield: 1 หน้าต่างต่อจอ ดักคลิก/ลากทั้งหมดไว้เอง ไม่ให้หลุดไปโดนหน้าต่างเบื้องหลัง
+        ; (มองไม่เห็น แต่ยังรับคลิกอยู่ - ไม่ใช่ click-through)
+        for m in monitors {
             sg := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08080000")
             sg.BackColor := "000000"
-            sg.Show("x" mL " y" mT " w" (mR - mL) " h" (mB - mT) " NoActivate")
+            sg.Show("x" m.l " y" m.t " w" (m.r - m.l) " h" (m.b - m.t) " NoActivate")
             WinSetTransparent(1, sg)
             shields.Push(sg)
+        }
+
+        ; frame: หน้าต่างกรอบไกด์บาง ๆ สีเทา 1 อันต่อจอ (สร้างไว้ก่อน ซ่อนไว้ก่อน)
+        ; ตำแหน่ง/ขนาด/รูปทรงของแต่ละอันจะถูกคำนวณใหม่ทุกครั้งที่ลาก ให้ "ท่อน" ที่อยู่บนจอนั้น ๆ เท่านั้น
+        for m in monitors {
+            fw := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08080020")
+            fw.BackColor := "B0B0B0"
+            fw.Show("x0 y0 w1 h1 Hide")
+            frames.Push(fw)
+            frameVisible.Push(false)
         }
 
         ; รอผู้ใช้เริ่มลากเมาส์ (สูงสุด 8 วิ, กด Esc ยกเลิกได้)
@@ -138,48 +158,31 @@ F6_StartOCR() {
 
         MouseGetPos(&x1, &y1)
 
-        ; เตรียม pen/DC สำหรับวาดกรอบ XOR แบบ rubber-band (วาดซ้ำที่พิกัดเดิม = ลบ)
-        hdc := DllCall("GetDC", "ptr", 0, "ptr")
-        pen := DllCall("CreatePen", "int", 0, "int", 2, "uint", 0xB0B0B0, "ptr")
-        oldPen := DllCall("SelectObject", "ptr", hdc, "ptr", pen, "ptr")
-        nullBrush := DllCall("GetStockObject", "int", 5, "ptr")  ; NULL_BRUSH
-        oldBrush := DllCall("SelectObject", "ptr", hdc, "ptr", nullBrush, "ptr")
-        oldROP := DllCall("SetROP2", "ptr", hdc, "int", 7, "int")  ; R2_XORPEN
-
         hasFrame := false
         lastX := 0, lastY := 0, lastW := 0, lastH := 0
 
         cancelled := false
-        try {
-            while GetKeyState("LButton", "P") {
-                if GetKeyState("Escape", "P") {
-                    cancelled := true
-                    break
-                }
-                MouseGetPos(&cx, &cy)
-                x := Min(x1, cx), y := Min(y1, cy)
-                w := Max(Abs(cx - x1), 2), h := Max(Abs(cy - y1), 2)
-
-                if (!hasFrame || x != lastX || y != lastY || w != lastW || h != lastH) {
-                    if hasFrame
-                        DllCall("Rectangle", "ptr", hdc, "int", lastX, "int", lastY, "int", lastX + lastW, "int", lastY + lastH)
-                    DllCall("Rectangle", "ptr", hdc, "int", x, "int", y, "int", x + w, "int", y + h)
-                    hasFrame := true
-                    lastX := x, lastY := y, lastW := w, lastH := h
-                }
-                Sleep(8)
+        while GetKeyState("LButton", "P") {
+            if GetKeyState("Escape", "P") {
+                cancelled := true
+                break
             }
-            if hasFrame
-                DllCall("Rectangle", "ptr", hdc, "int", lastX, "int", lastY, "int", lastX + lastW, "int", lastY + lastH)
-        } finally {
-            DllCall("SetROP2", "ptr", hdc, "int", oldROP)
-            DllCall("SelectObject", "ptr", hdc, "ptr", oldPen)
-            DllCall("SelectObject", "ptr", hdc, "ptr", oldBrush)
-            DllCall("DeleteObject", "ptr", pen)
-            DllCall("ReleaseDC", "ptr", 0, "ptr", hdc)
+            MouseGetPos(&cx, &cy)
+            x := Min(x1, cx), y := Min(y1, cy)
+            w := Max(Abs(cx - x1), 2), h := Max(Abs(cy - y1), 2)
+
+            if (!hasFrame || x != lastX || y != lastY || w != lastW || h != lastH) {
+                F6_UpdateFrames(monitors, frames, frameVisible, x, y, w, h, 2)
+                hasFrame := true
+                lastX := x, lastY := y, lastW := w, lastH := h
+            }
+            Sleep(8)
         }
 
         MouseGetPos(&x2, &y2)
+
+        for fw in frames
+            fw.Show("Hide")
 
         if (cancelled) {
             TrayTip("OCR", "ยกเลิกแล้ว", 2)
@@ -200,10 +203,13 @@ F6_StartOCR() {
         x := Max(x, vLeft), y := Max(y, vTop)
         w := Min(w, vRight - x), h := Min(h, vBottom - y)
 
-        ; ปิด shield ก่อน capture กันมันติดไปในภาพ (ตัวกรอบ XOR ลบตัวเองไปแล้วตั้งแต่ข้างบน)
+        ; ปิด shield/frame ทั้งหมดก่อน capture กันมันติดไปในภาพ
         for sg in shields
             sg.Destroy()
         shields := []
+        for fw in frames
+            fw.Destroy()
+        frames := []
 
         Sleep(100)
 
@@ -224,7 +230,52 @@ F6_StartOCR() {
         ToolTip()
         for sg in shields
             sg.Destroy()
+        for fw in frames
+            fw.Destroy()
         F6_OCRBusy := false
+    }
+}
+
+; อัปเดตกรอบไกด์ทุกจอให้ตรงกับ selection (X,Y,W,H เป็นพิกัดจอรวม) แบ่งเป็นท่อนตามจอ
+; แต่ละท่อน "กลวงตรงกลาง" (เส้นขอบหนา T พิกเซล) และ clip ให้อยู่ในจอนั้นจอเดียวเท่านั้น
+F6_UpdateFrames(monitors, frames, frameVisible, X, Y, W, H, T) {
+    innerX1 := X + T, innerY1 := Y + T
+    innerX2 := X + W - T, innerY2 := Y + H - T
+    hasInner := (innerX2 > innerX1 && innerY2 > innerY1)
+
+    for i, m in monitors {
+        ox1 := Max(X, m.l), oy1 := Max(Y, m.t)
+        ox2 := Min(X + W, m.r), oy2 := Min(Y + H, m.b)
+
+        if (ox2 <= ox1 || oy2 <= oy1) {
+            if frameVisible[i] {
+                frames[i].Show("Hide")
+                frameVisible[i] := false
+            }
+            continue
+        }
+
+        localW := ox2 - ox1, localH := oy2 - oy1
+        outerRgn := DllCall("CreateRectRgn", "int", 0, "int", 0, "int", localW, "int", localH, "ptr")
+
+        if hasInner {
+            ix1 := Max(innerX1, ox1), iy1 := Max(innerY1, oy1)
+            ix2 := Min(innerX2, ox2), iy2 := Min(innerY2, oy2)
+
+            if (ix2 > ix1 && iy2 > iy1) {
+                innerRgn := DllCall("CreateRectRgn", "int", ix1 - ox1, "int", iy1 - oy1, "int", ix2 - ox1, "int", iy2 - oy1, "ptr")
+                DllCall("CombineRgn", "ptr", outerRgn, "ptr", outerRgn, "ptr", innerRgn, "int", 4)  ; RGN_DIFF
+                DllCall("DeleteObject", "ptr", innerRgn)
+            }
+        }
+
+        WinMove(ox1, oy1, localW, localH, frames[i])
+        DllCall("SetWindowRgn", "ptr", frames[i].Hwnd, "ptr", outerRgn, "int", true)
+
+        if !frameVisible[i] {
+            frames[i].Show("NoActivate")
+            frameVisible[i] := true
+        }
     }
 }
 F7::Send "{Delete}"
