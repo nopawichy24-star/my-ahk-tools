@@ -83,20 +83,29 @@ F6_RunOriginal() {
 ; F6 double-press: OCR พื้นที่ที่ลากเลือกบนจอ (ญี่ปุ่น/อังกฤษ)
 ; แคปเจอร์เองในหน่วยความจำ (OCR.FromRect) ไม่แตะ Clipboard เลยระหว่างจับภาพ
 ; -> ไม่มีรูปภาพหลงเหลือใน Clipboard/Clipboard History เลย (ต่างจากกด F6 ครั้งเดียวที่ยังเก็บภาพเหมือนเดิม)
+; มี shield เต็มจอกันคลิก/ลากหลุดไปโดนโปรแกรมเบื้องหลังระหว่างเลือกพื้นที่
 ; ผลลัพธ์เก็บใน Clipboard เป็นข้อความเฉย ๆ ไม่ paste ให้อัตโนมัติ
 ; ===============================
 F6_StartOCR() {
     CoordMode("Mouse", "Screen")
+
+    vLeft := SysGet(76), vTop := SysGet(77)
+    vW := SysGet(78), vH := SysGet(79)
+
+    ; shield: คลุมทั้งจอ ดักคลิก/ลากทั้งหมดไว้เอง ไม่ให้หลุดไปโดนหน้าต่างเบื้องหลัง
+    ; (มองไม่เห็น แต่ยังรับคลิกอยู่ - ไม่ใช่ click-through)
+    shield := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08080000")
+    shield.BackColor := "000000"
+    shield.Show("x" vLeft " y" vTop " w" vW " h" vH " NoActivate")
+    WinSetTransparent(1, shield)
 
     ; รอผู้ใช้เริ่มลากเมาส์ (สูงสุด 8 วิ, กด Esc ยกเลิกได้)
     ToolTip("ลากเลือกพื้นที่ที่ต้องการ OCR (Esc = ยกเลิก)")
     waitStart := A_TickCount
     started := false
     while (A_TickCount - waitStart < 8000) {
-        if GetKeyState("Escape", "P") {
-            ToolTip()
-            return
-        }
+        if GetKeyState("Escape", "P")
+            break
         if GetKeyState("LButton", "P") {
             started := true
             break
@@ -104,15 +113,20 @@ F6_StartOCR() {
         Sleep(10)
     }
     ToolTip()
-    if !started
+
+    if !started {
+        shield.Destroy()
+        TrayTip("OCR", "ยกเลิก (ไม่มีการลากเลือก)", 2)
         return
+    }
 
     MouseGetPos(&x1, &y1)
 
-    ; กรอบสี่เหลี่ยมโปร่งแสงไว้เป็น guide ตอนลาก (ไม่ใช่โปรแกรม OCR แค่เส้นนำสายตา)
-    box := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08000020")
-    box.BackColor := "00FF00"
-    WinSetTransparent(120, box)
+    ; frame: กรอบไกด์บาง ๆ สีเทา (เส้นขอบกลวง ไม่ทึบ) - click-through, ไม่ขโมย focus
+    frame := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08080020")
+    frame.BackColor := "B0B0B0"
+    frame.Show("x" x1 " y" y1 " w2 h2 NoActivate")
+    WinSetTransparent(230, frame)
 
     cancelled := false
     while GetKeyState("LButton", "P") {
@@ -122,32 +136,58 @@ F6_StartOCR() {
         }
         MouseGetPos(&cx, &cy)
         x := Min(x1, cx), y := Min(y1, cy)
-        w := Max(Abs(cx - x1), 1), h := Max(Abs(cy - y1), 1)
-        box.Show("x" x " y" y " w" w " h" h " NoActivate")
-        Sleep(10)
+        w := Max(Abs(cx - x1), 2), h := Max(Abs(cy - y1), 2)
+        F6_UpdateFrame(frame, x, y, w, h, 2)
+        Sleep(8)
     }
 
     MouseGetPos(&x2, &y2)
-    box.Destroy()
+    shield.Destroy()
+    frame.Destroy()
 
-    if (cancelled)
+    if (cancelled) {
+        TrayTip("OCR", "ยกเลิกแล้ว", 2)
         return
+    }
 
     x := Min(x1, x2), y := Min(y1, y2)
     w := Abs(x2 - x1), h := Abs(y2 - y1)
 
-    if (w < 4 || h < 4)
-        return  ; ลากน้อยเกินไป ถือว่ายกเลิก
+    if (w < 6 || h < 6) {
+        TrayTip("OCR", "พื้นที่ที่เลือกเล็กเกินไป ลองใหม่อีกครั้ง", 2)
+        return
+    }
 
-    Sleep(80)  ; กันกรอบสีเขียวหลุดติดไปในภาพที่ capture
+    Sleep(80)  ; กัน overlay หลุดติดไปในภาพที่ capture
 
     try {
         result := OCR.FromRect(x, y, w, h, {lang: "ja-JP", scale: 2})
-        A_Clipboard := Trim(result.Text)
+        text := Trim(result.Text)
+
+        if (text = "") {
+            TrayTip("OCR", "ไม่พบข้อความในพื้นที่ที่เลือก", 3)
+            return
+        }
+
+        A_Clipboard := text
         TrayTip("OCR เสร็จแล้ว", "ข้อความอยู่ใน Clipboard แล้ว กด Ctrl+V เพื่อวางเอง", 2)
     } catch as e {
         MsgBox("OCR ไม่สำเร็จ: " e.Message)
     }
+}
+
+; วาดกรอบสี่เหลี่ยมกลวง (เส้นขอบหนา thickness px) ที่ตำแหน่ง x,y ขนาด w,h โดยไม่ fill ตรงกลาง
+F6_UpdateFrame(g, x, y, w, h, thickness := 2) {
+    outer := DllCall("CreateRectRgn", "int", 0, "int", 0, "int", w, "int", h, "ptr")
+
+    if (w > thickness * 2 && h > thickness * 2) {
+        inner := DllCall("CreateRectRgn", "int", thickness, "int", thickness, "int", w - thickness, "int", h - thickness, "ptr")
+        DllCall("CombineRgn", "ptr", outer, "ptr", outer, "ptr", inner, "int", 4)  ; RGN_DIFF
+        DllCall("DeleteObject", "ptr", inner)
+    }
+
+    WinMove(x, y, w, h, g)
+    DllCall("SetWindowRgn", "ptr", g.Hwnd, "ptr", outer, "int", true)
 }
 F7::Send "{Delete}"
 F8::WinClose("A")
