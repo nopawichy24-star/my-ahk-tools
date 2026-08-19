@@ -6,7 +6,17 @@
 
 ; ================= DPI AWARE =================
 ; ทำให้รองรับหลายจอ + scaling ต่างกัน
-DllCall("SetProcessDpiAwarenessContext", "ptr", -4, "ptr")
+;
+; ใช้ SetThreadDpiAwarenessContext ไม่ใช่ SetProcessDpiAwarenessContext เพราะ AutoHotkey สร้าง
+; hidden window หลักของตัวเองไปแล้วตั้งแต่ตอน process เริ่มทำงาน ก่อนโค้ด script บรรทัดแรกจะรัน
+; ด้วยซ้ำ - Windows จะปฏิเสธ SetProcessDpiAwarenessContext แบบเงียบ ๆ (คืนค่า false โดยสคริปต์
+; ไม่เคยเช็ค) ทันทีที่ process มี top-level window อยู่แล้วแม้แต่บานเดียว ทำให้ตัวแปรพิกัดเมาส์
+; (MouseGetPos/GetCursorPos) ยังคงถูกต้องเป๊ะทุกจอเสมอ (ไม่ขึ้นกับ DPI awareness ของ process
+; ที่เรียก) แต่หน้าต่างที่ script สร้างเอง (เช่นกรอบ F6) จะถูก DWM scale/ขยับพิกัดผิดเพี้ยนทันทีที่
+; ไปอยู่บนจอที่ scale ต่างจากจอหลัก เพราะ process ยังไม่ได้เป็น Per-Monitor DPI aware จริง ๆ
+; SetThreadDpiAwarenessContext เปลี่ยนได้ทุกเมื่อระดับ thread โดยไม่ติดข้อจำกัดนี้ และ AutoHotkey
+; รันทุกอย่าง (hotkey/timer/gui) บน OS thread เดียวกันหมด เรียกครั้งเดียวตรงนี้จึงพอสำหรับทั้งสคริปต์
+DllCall("SetThreadDpiAwarenessContext", "ptr", -4, "ptr")
 
 ; =========================================================
 ; Acrobat / Reader Group
@@ -28,9 +38,11 @@ RETRY_SLEEP := 45
 RETRY_COUNT := 6
 
 ; =========================
-; คืนตำแหน่งเมาส์กลับจุดเดิม แบบ transaction มี generation token
+; ย้ายเมาส์ไปกึ่งกลางจอที่กำลังใช้งานอยู่ (ไม่ใช่คืนตำแหน่งเดิมแบบก่อนหน้านี้) แบบ transaction
+; มี generation token เหมือนเดิม
 ; ใช้พิกัดแบบ Screen (พิกเซลจริง) เพราะสคริปต์ตั้ง DPI awareness ไว้แล้วด้านบนสุดของไฟล์
-; (SetProcessDpiAwarenessContext) พิกัด Screen จึงตรงเป๊ะทุกจอแม้แต่ละจอจะขนาด/สเกลไม่เท่ากัน
+; (SetThreadDpiAwarenessContext) พิกัด Screen จึงตรงเป๊ะทุกจอแม้แต่ละจอจะขนาด/สเกลไม่เท่ากัน -
+; MonitorGet() จึงคืนขอบเขตจอจริงเป็นพิกเซลจริงด้วยเช่นกัน ไม่ถูก virtualize/scale ผิดจอ
 ;
 ; ทำไมต้องมี token/generation: ทุกปุ่มตัวเลขใช้ตัวแปรร่วมกันชุดเดียว (g_SavedMouseX/Y)
 ; ถ้ากดปุ่มถัดไปเร็ว ๆ ก่อนที่ delayed restore ของปุ่มก่อนหน้าจะยิง ตัว delayed restore
@@ -42,17 +54,37 @@ global g_MouseRestoreGen := 0
 global g_SavedMouseX := 0
 global g_SavedMouseY := 0
 
-; เริ่ม "ธุรกรรม" คืนเมาส์ใหม่: บันทึกตำแหน่งปัจจุบัน + คืน token สำหรับ commit ทีหลัง
+; หาว่าจุด (px,py) อยู่บนจอไหน แล้วคืนจุดกึ่งกลางของจอนั้น (fallback ไปจอ primary
+; ถ้าหาไม่เจอจริง ๆ - ปกติไม่ควรเกิดเพราะจุดมาจาก MouseGetPos บนจอใดจอหนึ่งเสมอ)
+GetMonitorCenter(px, py, &cx, &cy) {
+    Loop MonitorGetCount() {
+        MonitorGet(A_Index, &l, &t, &r, &b)
+        if (px >= l && px < r && py >= t && py < b) {
+            cx := (l + r) // 2
+            cy := (t + b) // 2
+            return
+        }
+    }
+    MonitorGet(MonitorGetPrimary(), &l, &t, &r, &b)
+    cx := (l + r) // 2
+    cy := (t + b) // 2
+}
+
+; เริ่ม "ธุรกรรม" ย้ายเมาส์ใหม่: หาจอที่เมาส์อยู่ตอนนี้ คำนวณจุดกึ่งกลางจอนั้นเก็บไว้
+; (ไม่ใช่ตำแหน่งเมาส์ดิบแบบเดิม) + คืน token สำหรับ commit ทีหลัง
 MouseRestore_Begin() {
     global g_MouseRestoreGen, g_SavedMouseX, g_SavedMouseY
     g_MouseRestoreGen += 1
     CoordMode("Mouse", "Screen")
-    MouseGetPos(&g_SavedMouseX, &g_SavedMouseY)
+    MouseGetPos(&mx, &my)
+    GetMonitorCenter(mx, my, &cx, &cy)
+    g_SavedMouseX := cx
+    g_SavedMouseY := cy
     return g_MouseRestoreGen
 }
 
-; คืนตำแหน่งเมาส์ตาม token ที่ระบุ (ถ้ายังเป็น generation ล่าสุดอยู่) แล้วตั้ง delayed
-; restore ซ้ำอีกครั้งเผื่อ Acrobat เองขยับเมาส์ช้ากว่าที่เราคืนตอนแรก (เช่น toolbar ลอย
+; ย้ายเมาส์ไปกึ่งกลางจอตาม token ที่ระบุ (ถ้ายังเป็น generation ล่าสุดอยู่) แล้วตั้ง delayed
+; move ซ้ำอีกครั้งเผื่อ Acrobat เองขยับเมาส์ช้ากว่าที่เราย้ายตอนแรก (เช่น toolbar ลอย
 ; มี hover/animation ของตัวเองหลังรับคลิก)
 MouseRestore_Commit(gen) {
     global g_MouseRestoreGen, g_SavedMouseX, g_SavedMouseY

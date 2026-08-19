@@ -180,15 +180,33 @@ AppsKey:: {
         return
     }
 
-    ; เปิดเป็นหน้าต่าง Edge ใหม่แยกจากแท็บ/หน้าต่างที่เปิดอยู่ แล้ว maximize ทันที
-    ; รอแค่ให้หน้าต่างมีอยู่จริง (WinWait) ไม่รอ OS สลับ focus ให้ (WinWaitActive)
-    ; และตัด AlwaysOnTop + Sleep(800) ที่เหลือจากโค้ดเก่าออก เพราะไม่มีผลต่อความเร็วเปิดไฟล์
-    ; มีแต่ทำให้หน่วงเพิ่มโดยไม่จำเป็น
-    Run('msedge.exe --new-window "' path '"')
+    OpenPdfInAcrobat(path)
+}
 
-    if WinWait("ahk_exe msedge.exe", , 5) {
-        WinActivate("ahk_exe msedge.exe")
-        WinMaximize("ahk_exe msedge.exe")
+;----------------------------------------
+; เปิด PDF ด้วย Acrobat โดยตรง (ไม่ผ่าน Edge)
+;----------------------------------------
+; เหตุผลที่เปลี่ยนจาก Edge --new-window มาเป็นเรียก Acrobat.exe ตรง ๆ:
+; Edge ต้องเปิด process เบราว์เซอร์ใหม่ทั้งตัว + init PDF viewer extension ก่อนเริ่ม render
+; ทุกครั้ง ซึ่งช้ากว่า native PDF renderer ของ Acrobat มาก โดยเฉพาะไฟล์ใหญ่
+; ใช้สวิตช์ /n (เอกสารของ Adobe: เปิดเป็น instance/หน้าต่างใหม่) กัน Acrobat เอาไฟล์ไปเปิด
+; เป็นแท็บใหม่ในหน้าต่างที่เปิดอยู่แล้ว - ต้องการหน้าต่างแยกเสมอตามที่ผู้ใช้ระบุ
+OpenPdfInAcrobat(path) {
+    acrobat := "C:\Program Files\Adobe\Acrobat DC\Acrobat\Acrobat.exe"
+
+    if !FileExist(acrobat)
+        acrobat := "C:\Program Files (x86)\Adobe\Acrobat DC\Acrobat\Acrobat.exe"
+
+    if !FileExist(acrobat) {
+        MsgBox("หา Acrobat.exe ไม่เจอ:`n" acrobat)
+        return
+    }
+
+    Run('"' acrobat '" /n "' path '"')
+
+    if WinWait("ahk_exe Acrobat.exe", , 5) {
+        WinActivate("ahk_exe Acrobat.exe")
+        WinMaximize("ahk_exe Acrobat.exe")
     }
 }
 
