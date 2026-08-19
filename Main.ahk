@@ -6,6 +6,7 @@
 ; INCLUDE MODULES
 ; ============================================
 #Include "secret.ahk"   ; ต้องมาก่อน
+#Include "Lib\OCR.ahk"  ; ใช้โดย mod_Hotkeys.ahk (F6 double-press OCR)
 
 #Include "mod_ToolboxGui.ahk"
 #Include "mod_CheckIn.ahk"
