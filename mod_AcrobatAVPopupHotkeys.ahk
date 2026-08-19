@@ -82,6 +82,13 @@ RestoreMousePos() {
     ; ถ้าเช็คแล้วบังเอิญ false ช่วงนั้นพอดี จะไม่คืนตำแหน่งให้เลยแบบเงียบ ๆ
     CoordMode("Mouse", "Screen")
     MouseMove(g_SavedMouseX, g_SavedMouseY, 0)
+
+    ; คืนซ้ำอีกครั้งหลังหน่วงเล็กน้อย เผื่อ Acrobat เองขยับเมาส์ช้ากว่าที่เราคืนตอนแรก
+    ; (เช่น toolbar ลอยมี hover/animation ของตัวเองหลังรับคลิก) กันเคสที่คืนไปแล้วแต่โดนขยับทับ
+    ; ตั้ง CoordMode ใหม่ในนี้ด้วย เพราะ SetTimer callback รันเป็นคนละ thread ไม่ได้สืบทอด
+    ; CoordMode จาก thread ที่ตั้งเวลาไว้
+    savedX := g_SavedMouseX, savedY := g_SavedMouseY
+    SetTimer(() => (CoordMode("Mouse", "Screen"), MouseMove(savedX, savedY, 0)), -150)
 }
 
 GetAVPopup(which) {

@@ -129,10 +129,16 @@ F6_StartOCR() {
 
         ; frame: หน้าต่างกรอบไกด์บาง ๆ สีเทา 1 อันต่อจอ (สร้างไว้ก่อน ซ่อนไว้ก่อน)
         ; ตำแหน่ง/ขนาด/รูปทรงของแต่ละอันจะถูกคำนวณใหม่ทุกครั้งที่ลาก ให้ "ท่อน" ที่อยู่บนจอนั้น ๆ เท่านั้น
+        ; หมายเหตุบั๊กที่แก้: หน้าต่างนี้มี WS_EX_LAYERED (+E...20) แต่ก่อนหน้านี้ไม่เคยเรียก
+        ; WinSetTransparent เลย - หน้าต่าง layered ที่ไม่เคยตั้ง transparency จะไม่ถูกวาด/มองไม่เห็น
+        ; เลยทั้งที่โค้ดส่วนอื่นถูกต้องหมด ("Hide" ก็ไม่ใช่ option จริงของ .Show() เลยเปลี่ยนไปใช้
+        ; .Hide() ตรง ๆ แทนหลังสร้างเสร็จ)
         for m in monitors {
             fw := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08080020")
             fw.BackColor := "B0B0B0"
-            fw.Show("x0 y0 w1 h1 Hide")
+            fw.Show("x0 y0 w1 h1 NoActivate")
+            WinSetTransparent(230, fw)
+            fw.Hide()
             frames.Push(fw)
             frameVisible.Push(false)
         }
