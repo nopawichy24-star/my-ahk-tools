@@ -26,10 +26,13 @@ RETRY_SLEEP := 45
 RETRY_COUNT := 6
 
 ; =========================
-; FINAL MOUSE POSITION (Client-safe version)
+; คืนตำแหน่งเมาส์กลับจุดเดิม (บันทึกตำแหน่งก่อนคลิก แล้วคืนกลับหลังคลิกเสร็จ)
+; ใช้พิกัดแบบ Screen (พิกเซลจริง) แทน Client เดิม เพราะสคริปต์ตั้ง DPI awareness
+; ไว้แล้วด้านบนสุดของไฟล์ (SetProcessDpiAwarenessContext) พิกัด Screen จึงตรงเป๊ะ
+; ทุกจอแม้แต่ละจอจะขนาด/สเกลไม่เท่ากัน (ไม่ต้องแปลงพิกัดต่อจอเอง)
 ; =========================
-END_CX := 922
-END_CY := 516
+global g_SavedMouseX := 0
+global g_SavedMouseY := 0
 
 ; =========================
 ; OFFSETS
@@ -62,12 +65,22 @@ K0 := [[K7_FIRST_X, K7_FIRST_Y],[K0_SECOND_X, K0_SECOND_Y]]
 ; HELPERS (CLIENT-BASED SAFE)
 ; =========================================================
 
-MoveMouseToEnd() {
+; หมายเหตุ: ClickOffset() ใช้ ControlClick ซึ่งไม่ขยับเมาส์จริงระหว่างคลิกอยู่แล้ว
+; (ControlClick ส่งคลิกตรงเข้า control โดยไม่ต้องย้ายเคอร์เซอร์) ตำแหน่งเมาส์จึงไม่ขยับ
+; ระหว่างคลิกเลย ที่ต้องบันทึก/คืนตรงนี้คือกันไว้เผื่อ Acrobat มีพฤติกรรม
+; focus-follows-mouse หรืออนาคตเปลี่ยนไปใช้การคลิกแบบขยับเมาส์จริง
+SaveMousePos() {
+    global g_SavedMouseX, g_SavedMouseY
+    CoordMode("Mouse", "Screen")
+    MouseGetPos(&g_SavedMouseX, &g_SavedMouseY)
+}
+
+RestoreMousePos() {
+    global g_SavedMouseX, g_SavedMouseY
     if !WinActive("ahk_group AcrobatApps")
         return
-    hwnd := WinExist("A")
-    CoordMode "Mouse", "Client"
-    MouseMove END_CX, END_CY, 0
+    CoordMode("Mouse", "Screen")
+    MouseMove(g_SavedMouseX, g_SavedMouseY, 0)
 }
 
 GetAVPopup(which) {
@@ -142,8 +155,9 @@ HandleSC002TriplePress() {
     } else {
         global g_AcroHotkeysEnabled
         if (g_AcroHotkeysEnabled) {
+            SaveMousePos()
             ClickMultiStep_NoMove(K1)
-            MoveMouseToEnd()
+            RestoreMousePos()
         }
     }
 }
@@ -156,15 +170,15 @@ HandleSC002TriplePress() {
 SC002:: HandleSC002TriplePress()
 
 #HotIf WinActive("ahk_group AcrobatApps") && g_AcroHotkeysEnabled
-SC00B:: (ClickMultiStep_NoMove(K0), MoveMouseToEnd())
-SC003:: (ClickMultiStep_NoMove(K2), MoveMouseToEnd())
-SC004:: (ClickMultiStep_NoMove(K3), MoveMouseToEnd())
-SC005:: (ClickSingle_NoMove(K4[1]), MoveMouseToEnd())
-SC006:: (ClickMultiStep_NoMove(K5), MoveMouseToEnd())
-SC007:: (ClickMultiStep_NoMove(K6), MoveMouseToEnd())
-SC008:: (ClickMultiStep_NoMove(K7), MoveMouseToEnd())
-SC009:: (ClickMultiStep_NoMove(K8), MoveMouseToEnd())
-SC00A:: (ClickMultiStep_NoMove(K9), MoveMouseToEnd())
+SC00B:: (SaveMousePos(), ClickMultiStep_NoMove(K0), RestoreMousePos())
+SC003:: (SaveMousePos(), ClickMultiStep_NoMove(K2), RestoreMousePos())
+SC004:: (SaveMousePos(), ClickMultiStep_NoMove(K3), RestoreMousePos())
+SC005:: (SaveMousePos(), ClickSingle_NoMove(K4[1]), RestoreMousePos())
+SC006:: (SaveMousePos(), ClickMultiStep_NoMove(K5), RestoreMousePos())
+SC007:: (SaveMousePos(), ClickMultiStep_NoMove(K6), RestoreMousePos())
+SC008:: (SaveMousePos(), ClickMultiStep_NoMove(K7), RestoreMousePos())
+SC009:: (SaveMousePos(), ClickMultiStep_NoMove(K8), RestoreMousePos())
+SC00A:: (SaveMousePos(), ClickMultiStep_NoMove(K9), RestoreMousePos())
 
 #HotIf
 
