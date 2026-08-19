@@ -81,52 +81,71 @@ F6_RunOriginal() {
 
 ; ===============================
 ; F6 double-press: OCR พื้นที่ที่ลากเลือกบนจอ (ญี่ปุ่น/อังกฤษ)
-; ผลลัพธ์เก็บใน Clipboard เฉย ๆ ไม่ paste ให้อัตโนมัติ
+; แคปเจอร์เองในหน่วยความจำ (OCR.FromRect) ไม่แตะ Clipboard เลยระหว่างจับภาพ
+; -> ไม่มีรูปภาพหลงเหลือใน Clipboard/Clipboard History เลย (ต่างจากกด F6 ครั้งเดียวที่ยังเก็บภาพเหมือนเดิม)
+; ผลลัพธ์เก็บใน Clipboard เป็นข้อความเฉย ๆ ไม่ paste ให้อัตโนมัติ
 ; ===============================
 F6_StartOCR() {
-    static ScreenSnipperProcessName := "ScreenClippingHost.exe"
+    CoordMode("Mouse", "Screen")
 
-    savedClip := ClipboardAll()
-    A_Clipboard := ""  ; เคลียร์ไว้ก่อน เพื่อรู้ว่าผู้ใช้ลากเลือกเสร็จแล้วหรือยัง
-
-    RunWait("ms-screenclip:")  ; เปิดโหมดลากเลือกพื้นที่ของ Windows (ไม่ใช่โปรแกรม OCR)
-
-    WinWaitActive("ahk_exe " ScreenSnipperProcessName, , 2)
-    Loop {
-        DllCall("user32.dll\GetCursorPos", "int64P", &pt64 := 0)
-        try {
-            hWnd := DllCall("GetAncestor", "Ptr", DllCall("user32.dll\WindowFromPoint", "int64", pt64, "ptr"), "UInt", 2, "ptr")
-            if WinGetProcessName(hWnd) != ScreenSnipperProcessName
-                break
-        } catch {
+    ; รอผู้ใช้เริ่มลากเมาส์ (สูงสุด 8 วิ, กด Esc ยกเลิกได้)
+    ToolTip("ลากเลือกพื้นที่ที่ต้องการ OCR (Esc = ยกเลิก)")
+    waitStart := A_TickCount
+    started := false
+    while (A_TickCount - waitStart < 8000) {
+        if GetKeyState("Escape", "P") {
+            ToolTip()
+            return
+        }
+        if GetKeyState("LButton", "P") {
+            started := true
             break
         }
-        Sleep(50)
+        Sleep(10)
     }
-
-    if !ClipWait(1, 1) {
-        A_Clipboard := savedClip  ; ผู้ใช้กด Esc ไม่ได้ลากเลือกอะไร -> คืนคลิปบอร์ดเดิม
+    ToolTip()
+    if !started
         return
+
+    MouseGetPos(&x1, &y1)
+
+    ; กรอบสี่เหลี่ยมโปร่งแสงไว้เป็น guide ตอนลาก (ไม่ใช่โปรแกรม OCR แค่เส้นนำสายตา)
+    box := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08000020")
+    box.BackColor := "00FF00"
+    WinSetTransparent(120, box)
+
+    cancelled := false
+    while GetKeyState("LButton", "P") {
+        if GetKeyState("Escape", "P") {
+            cancelled := true
+            break
+        }
+        MouseGetPos(&cx, &cy)
+        x := Min(x1, cx), y := Min(y1, cy)
+        w := Max(Abs(cx - x1), 1), h := Max(Abs(cy - y1), 1)
+        box.Show("x" x " y" y " w" w " h" h " NoActivate")
+        Sleep(10)
     }
 
-    Sleep(100)
+    MouseGetPos(&x2, &y2)
+    box.Destroy()
 
-    if !DllCall("IsClipboardFormatAvailable", "uint", 2) {  ; 2 = CF_BITMAP
-        A_Clipboard := savedClip
+    if (cancelled)
         return
-    }
 
-    DllCall("OpenClipboard", "ptr", A_ScriptHwnd)
-    hData := DllCall("GetClipboardData", "uint", 2, "ptr")
-    hBitmap := DllCall("User32.dll\CopyImage", "UPtr", hData, "UInt", 0, "Int", 0, "Int", 0, "UInt", 0x2000, "Ptr")
-    DllCall("CloseClipboard")
+    x := Min(x1, x2), y := Min(y1, y2)
+    w := Abs(x2 - x1), h := Abs(y2 - y1)
+
+    if (w < 4 || h < 4)
+        return  ; ลากน้อยเกินไป ถือว่ายกเลิก
+
+    Sleep(80)  ; กันกรอบสีเขียวหลุดติดไปในภาพที่ capture
 
     try {
-        result := OCR.FromBitmap(hBitmap, {lang: "ja-JP", scale: 2})
+        result := OCR.FromRect(x, y, w, h, {lang: "ja-JP", scale: 2})
         A_Clipboard := Trim(result.Text)
         TrayTip("OCR เสร็จแล้ว", "ข้อความอยู่ใน Clipboard แล้ว กด Ctrl+V เพื่อวางเอง", 2)
     } catch as e {
-        A_Clipboard := savedClip
         MsgBox("OCR ไม่สำเร็จ: " e.Message)
     }
 }
