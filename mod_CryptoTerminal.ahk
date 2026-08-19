@@ -1,11 +1,16 @@
-﻿; mod_CryptoTerminal.ahk
+; mod_CryptoTerminal.ahk
 #Requires AutoHotkey v2.0
 
 ; ============================================================
 ; KHAO CRYPTO TERMINAL V2
 ; AHK v2 / single-file module
 ; Trigger:
-;   - Triple tap Q quickly
+;   - Triple tap Q quickly -> toggle price Widget directly
+;
+; โครงสร้าง (ปรับให้เรียบง่ายลง):
+;   Widget (ราคาสด, ลากย้ายได้)
+;     ├─ 🔗 Links  -> หน้าต่างเดียว แบ่งเป็นแท็บ (Charts / Data / On-chain)
+;     └─ 🔔 Alerts -> ตั้งเงื่อนไขแจ้งเตือนราคา
 ; ============================================================
 
 ; ----------------------------
@@ -17,7 +22,6 @@ CT["tapCount"]           := 0
 CT["lastTap"]            := 0
 CT["tapWindow"]          := 420
 
-CT["panelShown"]         := false
 CT["widgetShown"]        := false
 CT["alertsEnabled"]      := false
 
@@ -25,15 +29,9 @@ CT["refreshMs"] := 12000
 CT["cacheMs"]   := 8000
 CT["alertMs"]   := 10000
 
-CT["panelGui"]           := 0
 CT["widgetGui"]          := 0
-CT["toolsGui"]           := 0
-CT["advancedGui"]        := 0
-CT["proGui"]             := 0
-CT["coinListGui"]        := 0
+CT["linksGui"]           := 0
 CT["alertsGui"]          := 0
-CT["whaleGui"]           := 0
-CT["liqGui"]             := 0
 
 CT["widgetHwnd"]         := 0
 CT["widgetWidth"]        := 180
@@ -50,7 +48,7 @@ CT["iniPath"]            := A_ScriptDir "\CryptoTerminal.ini"
 CT["ctrl"]               := Map()
 
 ; ----------------------------
-; HOTKEY: Triple tap Q
+; HOTKEY: Triple tap Q -> เปิด/ปิด Widget ทันที (ตัดเมนูกลางออก ลดคลิก)
 ; ----------------------------
 ~q::
 {
@@ -66,59 +64,8 @@ CT["ctrl"]               := Map()
 
     if (CT["tapCount"] >= 3) {
         CT["tapCount"] := 0
-        CT_OpenPanel()
+        CT_ToggleWidget()
     }
-}
-
-; ============================================================
-; PANEL
-; ============================================================
-CT_OpenPanel(*) {
-    global CT
-
-    if (CT["panelShown"]) {
-        try CT["panelGui"].Destroy()
-        CT["panelShown"] := false
-        return
-    }
-
-    g := Gui("+AlwaysOnTop +ToolWindow", "KHAO TERMINAL")
-    CT_ApplyTheme(g, 10)
-
-    g.MarginX := 14
-    g.MarginY := 12
-
-    g.AddText("w170 Center", "╭─ 📊 KHAO TERMINAL ─╮")
-    g.AddText("w170 Center", "เลือกสิ่งที่ต้องการเปิด")
-    g.AddText("w170 Center", "╰──────────────────╯")
-    g.AddText("w170", "")
-
-    b1 := g.AddButton("w170 h30", "📊 Market Widget")
-    b2 := g.AddButton("w170 h30", "📈 Crypto Tools")
-    b3 := g.AddButton("w170 h30", "🧠 Advanced Crypto")
-    b4 := g.AddButton("w170 h30", "🐋 Pro Market Data")
-    b5 := g.AddButton("w170 h30", CT["alertsEnabled"] ? "🔔 Price Alerts (ON)" : "🔔 Price Alerts (OFF)")
-    b6 := g.AddButton("w170 h30", "❌ Close")
-
-    b1.OnEvent("Click", (*) => CT_ToggleWidget())
-    b2.OnEvent("Click", (*) => CT_OpenCryptoTools())
-    b3.OnEvent("Click", (*) => CT_OpenAdvanced())
-    b4.OnEvent("Click", (*) => CT_OpenPro())
-    b5.OnEvent("Click", (*) => CT_ToggleAlerts(b5))
-    b6.OnEvent("Click", (*) => CT_ClosePanel())
-
-    g.OnEvent("Close", (*) => CT_ClosePanel())
-    g.OnEvent("Escape", (*) => CT_ClosePanel())
-
-    g.Show("AutoSize")
-    CT["panelGui"] := g
-    CT["panelShown"] := true
-}
-
-CT_ClosePanel() {
-    global CT
-    try CT["panelGui"].Destroy()
-    CT["panelShown"] := false
 }
 
 ; ============================================================
@@ -166,11 +113,11 @@ CT_StartWidget() {
 
     g.AddText("w170", "")
 
-    b1 := g.AddButton("w170 h26", "📈 Open Tools")
+    b1 := g.AddButton("w170 h26", "🔗 Links")
     b2 := g.AddButton("w170 h26", "🔔 Alerts")
     b3 := g.AddButton("w170 h26", "❌ Close Widget")
 
-    b1.OnEvent("Click", (*) => CT_OpenCryptoTools())
+    b1.OnEvent("Click", (*) => CT_OpenLinks())
     b2.OnEvent("Click", (*) => CT_OpenAlertsManager())
     b3.OnEvent("Click", (*) => CT_StopWidget())
 
@@ -226,18 +173,6 @@ CT_StopWidget() {
     CT["widgetHwnd"] := 0
 }
 
-CT_DragWidget(wParam, lParam, msg, hwnd) {
-    global CT
-    if (!CT["widgetShown"])
-        return
-
-    if (hwnd != CT["widgetHwnd"])
-        return
-
-    ; drag only widget window
-    PostMessage(0xA1, 2,,, "ahk_id " hwnd) ; WM_NCLBUTTONDOWN / HTCAPTION
-}
-
 CT_SaveWidgetPos() {
     global CT
     if (!CT["widgetShown"])
@@ -264,12 +199,6 @@ CT_GetSavedWidgetPos() {
     }
 
     return m
-}
-
-CT_GetPrimaryWorkArea() {
-    idx := MonitorGetPrimary()
-    MonitorGetWorkArea(idx, &l, &t, &r, &b)
-    return Map("left", l, "top", t, "right", r, "bottom", b)
 }
 
 ; ============================================================
@@ -513,14 +442,6 @@ CT_HTTP(url) {
     return http.ResponseText
 }
 
-CT_JsonNestedNumber(json, rootKey, subKey) {
-    pat := '"' rootKey '".*?"' subKey '":\s*(-?[0-9]+(?:\.[0-9]+)?)'
-    m := []
-    if RegExMatch(json, pat, &m)
-        return m[1] + 0
-    return 0
-}
-
 CT_JsonSimpleNumber(json, key) {
     pat := '"' key '":\s*(-?[0-9]+(?:\.[0-9]+)?)'
     m := []
@@ -563,36 +484,64 @@ CT_FormatTrillions(n) {
 }
 
 ; ============================================================
-; CRYPTO TOOLS
+; LINKS (รวม Charts / Data / On-chain ไว้หน้าต่างเดียว เป็นแท็บ
+; แทนที่ popup แยก 5 อัน (Tools/Advanced/Pro/Whale/Liquidation) ของเดิม)
 ; ============================================================
-CT_OpenCryptoTools() {
+CT_OpenLinks() {
     global CT
 
-    try CT["toolsGui"].Destroy()
+    try CT["linksGui"].Destroy()
 
-    g := Gui("+AlwaysOnTop +ToolWindow", "📈 Crypto Tools")
+    g := Gui("+AlwaysOnTop +ToolWindow", "🔗 KHAO Links")
     CT_ApplyTheme(g, 10)
     g.MarginX := 12
     g.MarginY := 10
 
-    g.AddText("w170 Center", "📈 Crypto Tools")
-    g.AddText("w170", "")
+    tab := g.AddTab3("w280 h300", ["📊 Charts", "📈 Data", "🐋 On-chain"])
 
-    g.AddButton("w170 h26", "📈 TradingView BTC").OnEvent("Click", (*) => Run("https://www.tradingview.com/chart/?symbol=BINANCE:BTCUSDT"))
-    g.AddButton("w170 h26", "📈 TradingView ETH").OnEvent("Click", (*) => Run("https://www.tradingview.com/chart/?symbol=BINANCE:ETHUSDT"))
-    g.AddButton("w170 h26", "📈 TradingView SOL").OnEvent("Click", (*) => Run("https://www.tradingview.com/chart/?symbol=BINANCE:SOLUSDT"))
-    g.AddButton("w170 h26", "🥇 TradingView GOLD").OnEvent("Click", (*) => Run("https://www.tradingview.com/chart/?symbol=TVC:GOLD"))
+    ; ---------- แท็บ 1: Charts ----------
+    tab.UseTab(1)
+    g.AddText("xs y+10", "TradingView")
+    g.AddButton("w260 h26", "📈 BTC").OnEvent("Click", CT_OpenCoinChart.Bind("BTC"))
+    g.AddButton("w260 h26", "📈 ETH").OnEvent("Click", CT_OpenCoinChart.Bind("ETH"))
+    g.AddButton("w260 h26", "📈 SOL").OnEvent("Click", CT_OpenCoinChart.Bind("SOL"))
+    g.AddButton("w260 h26", "🥇 GOLD").OnEvent("Click", (*) => Run("https://www.tradingview.com/chart/?symbol=TVC:GOLD"))
+    g.AddButton("w260 h26", "📊 BTC Dominance").OnEvent("Click", (*) => Run("https://www.tradingview.com/chart/?symbol=CRYPTOCAP:BTC.D"))
 
-    g.AddText("w170", "")
-    g.AddButton("w170 h26", "🔎 Coin Search").OnEvent("Click", (*) => CT_CoinSearch())
-    g.AddButton("w170 h26", "📋 Coin List (20)").OnEvent("Click", (*) => CT_OpenCoinList())
-    g.AddButton("w170 h26", "📊 Refresh Widget Now").OnEvent("Click", (*) => CT_UpdateWidget())
+    g.AddText("xs y+10", "เหรียญยอดนิยม")
+    coins := ["BTC", "ETH", "SOL", "BNB", "XRP", "DOGE", "ADA", "ARB"]
+    col := 0
+    for sym in coins {
+        opt := (col = 0) ? "xs y+4 w60 h26" : "x+6 yp w60 h26"
+        btn := g.AddButton(opt, sym)
+        btn.OnEvent("Click", CT_OpenCoinChart.Bind(sym))
+        col := Mod(col + 1, 4)
+    }
 
-    g.AddText("w170", "")
-    g.AddButton("w170 h26", "❌ Close").OnEvent("Click", (*) => g.Destroy())
+    g.AddButton("xs y+10 w260 h26", "🔎 ค้นหาเหรียญอื่น...").OnEvent("Click", (*) => CT_CoinSearch())
+
+    ; ---------- แท็บ 2: Data ----------
+    tab.UseTab(2)
+    g.AddButton("xs y+10 w260 h26", "💰 Total Market Cap").OnEvent("Click", (*) => CT_ShowMarketCapPopup())
+    g.AddButton("w260 h26", "📈 BTC Fear & Greed").OnEvent("Click", (*) => Run("https://alternative.me/crypto/fear-and-greed-index/"))
+    g.AddButton("w260 h26", "📊 Funding Rate").OnEvent("Click", (*) => Run("https://www.coinglass.com/FundingRate"))
+    g.AddButton("w260 h26", "🧠 Crypto News Feed").OnEvent("Click", (*) => Run("https://cryptopanic.com/"))
+    g.AddButton("w260 h26", "📉 Liquidation Data").OnEvent("Click", (*) => Run("https://www.coinglass.com/LiquidationData"))
+    g.AddButton("w260 h26", "🔥 Liquidation Heatmap").OnEvent("Click", (*) => Run("https://www.coinglass.com/pro/futures/LiquidationHeatMap"))
+    g.AddButton("w260 h26", "📚 Orderbook (BTCUSDT)").OnEvent("Click", (*) => Run("https://www.coinglass.com/OrderBook"))
+
+    ; ---------- แท็บ 3: On-chain ----------
+    tab.UseTab(3)
+    g.AddButton("xs y+10 w260 h26", "🐋 Whale Alert").OnEvent("Click", (*) => Run("https://whale-alert.io/"))
+    g.AddButton("w260 h26", "🛰 Arkham Intel").OnEvent("Click", (*) => Run("https://platform.arkhamintelligence.com/"))
+    g.AddButton("w260 h26", "⛓ Mempool").OnEvent("Click", (*) => Run("https://mempool.space/"))
+
+    tab.UseTab()
+
+    g.AddButton("xm y+12 w280 h26", "❌ Close").OnEvent("Click", (*) => g.Destroy())
 
     g.Show("AutoSize")
-    CT["toolsGui"] := g
+    CT["linksGui"] := g
 }
 
 CT_CoinSearch() {
@@ -607,157 +556,13 @@ CT_CoinSearch() {
     Run("https://www.tradingview.com/chart/?symbol=BINANCE:" sym "USDT")
 }
 
-CT_OpenCoinList() {
-    global CT
-
-    try CT["coinListGui"].Destroy()
-
-    coins := [
-        "BTC","ETH","SOL","BNB","XRP","ADA","DOGE","AVAX","DOT","MATIC"
-      , "LINK","TRX","LTC","BCH","ATOM","UNI","ETC","FIL","APT","ARB"
-    ]
-
-    g := Gui("+AlwaysOnTop +ToolWindow", "📋 Coin List")
-    CT_ApplyTheme(g, 10)
-    g.MarginX := 10
-    g.MarginY := 10
-
-    g.AddText("w170 Center", "📋 Coin List (20)")
-    g.AddText("w170", "")
-
-    rowCount := 0
-    for _, sym in coins {
-        btn := g.AddButton("w150 h28", "📈 " sym)
-        btn.OnEvent("Click", CT_OpenCoinChart.Bind(sym))
-
-        rowCount += 1
-        if (Mod(rowCount, 2) = 1)
-            g.AddText("x+6 yp", "")
-        else
-            g.AddText("xs", "")
-    }
-
-    g.AddText("w170", "")
-    g.AddButton("w170 h26", "❌ Close").OnEvent("Click", (*) => g.Destroy())
-
-    g.Show("AutoSize")
-    CT["coinListGui"] := g
-}
-
 CT_OpenCoinChart(sym, *) {
     Run("https://www.tradingview.com/chart/?symbol=BINANCE:" sym "USDT")
-}
-
-; ============================================================
-; ADVANCED
-; ============================================================
-CT_OpenAdvanced() {
-    global CT
-
-    try CT["advancedGui"].Destroy()
-
-    g := Gui("+AlwaysOnTop +ToolWindow", "🧠 Advanced Crypto")
-    CT_ApplyTheme(g, 10)
-    g.MarginX := 12
-    g.MarginY := 10
-
-    g.AddText("w170 Center", "🧠 Advanced Crypto")
-    g.AddText("w170", "")
-
-    g.AddButton("w170 h26", "📈 BTC Fear & Greed").OnEvent("Click", (*) => Run("https://alternative.me/crypto/fear-and-greed-index/"))
-    g.AddButton("w170 h26", "📊 Funding Rate").OnEvent("Click", (*) => Run("https://www.coinglass.com/FundingRate"))
-    g.AddButton("w170 h26", "🧠 Crypto News Feed").OnEvent("Click", (*) => Run("https://cryptopanic.com/"))
-    g.AddButton("w170 h26", "🔔 Manage Price Alerts").OnEvent("Click", (*) => CT_OpenAlertsManager())
-
-    g.AddText("w170", "")
-    g.AddButton("w170 h26", "❌ Close").OnEvent("Click", (*) => g.Destroy())
-
-    g.Show("AutoSize")
-    CT["advancedGui"] := g
-}
-
-; ============================================================
-; PRO MARKET
-; ============================================================
-CT_OpenPro() {
-    global CT
-
-    try CT["proGui"].Destroy()
-
-    g := Gui("+AlwaysOnTop +ToolWindow", "🐋 Pro Market Data")
-    CT_ApplyTheme(g, 10)
-    g.MarginX := 12
-    g.MarginY := 10
-
-    g.AddText("w170 Center", "🐋 Pro Market Data")
-    g.AddText("w170", "")
-
-    g.AddButton("w170 h26", "💰 Total Crypto Market Cap").OnEvent("Click", (*) => CT_ShowMarketCapPopup())
-    g.AddButton("w170 h26", "🐋 Whale Alert Popup").OnEvent("Click", (*) => CT_OpenWhalePopup())
-    g.AddButton("w170 h26", "📉 Liquidation Tracker").OnEvent("Click", (*) => CT_OpenLiquidationPopup())
-    g.AddButton("w170 h26", "📊 BTC Dominance Chart").OnEvent("Click", (*) => Run("https://www.tradingview.com/chart/?symbol=CRYPTOCAP:BTC.D"))
-    g.AddButton("w170 h50", "📊 Orderbook Snapshot (BTCUSDT)").OnEvent("Click", (*) => Run("https://www.coinglass.com/OrderBook"))
-
-    g.AddText("w170", "")
-    g.AddButton("w170 h26", "❌ Close").OnEvent("Click", (*) => g.Destroy())
-
-    g.Show("AutoSize")
-    CT["proGui"] := g
 }
 
 CT_ShowMarketCapPopup() {
     data := CT_GetMarketData()
     MsgBox("💰 Total Crypto Market Cap`n`n" CT_FormatTrillions(data["total_mcap"]), "Market Cap")
-}
-
-CT_OpenWhalePopup() {
-    global CT
-
-    try CT["whaleGui"].Destroy()
-
-    g := Gui("+AlwaysOnTop +ToolWindow", "🐋 Whale Alert")
-    CT_ApplyTheme(g, 10)
-    g.MarginX := 12
-    g.MarginY := 10
-
-    g.AddText("w170 Center", "🐋 Whale Alert Popup")
-    g.AddText("w170", "เปิดเครื่องมือ whale tracking ที่ใช้บ่อย")
-    g.AddText("w170", "")
-
-    g.AddButton("w170 h26", "🐋 Whale Alert").OnEvent("Click", (*) => Run("https://whale-alert.io/"))
-    g.AddButton("w170 h26", "🛰 Arkham Intel").OnEvent("Click", (*) => Run("https://platform.arkhamintelligence.com/"))
-    g.AddButton("w170 h26", "⛓ Mempool").OnEvent("Click", (*) => Run("https://mempool.space/"))
-    g.AddButton("w170 h26", "❌ Close").OnEvent("Click", (*) => g.Destroy())
-
-    g.Show("AutoSize")
-    CT["whaleGui"] := g
-
-    TrayTip("🐋 Whale Alert", "Whale tools opened from popup.", 2)
-}
-
-CT_OpenLiquidationPopup() {
-    global CT
-
-    try CT["liqGui"].Destroy()
-
-    g := Gui("+AlwaysOnTop +ToolWindow", "📉 Liquidation Tracker")
-    CT_ApplyTheme(g, 10)
-    g.MarginX := 12
-    g.MarginY := 10
-
-    g.AddText("w170 Center", "📉 Liquidation Tracker")
-    g.AddText("w170", "เปิดหน้าติดตาม liquidation / heatmap")
-    g.AddText("w170", "")
-
-    g.AddButton("w170 h26", "📉 CoinGlass Liquidation").OnEvent("Click", (*) => Run("https://www.coinglass.com/LiquidationData"))
-    g.AddButton("w170 h26", "🔥 CoinGlass Heatmap").OnEvent("Click", (*) => Run("https://www.coinglass.com/pro/futures/LiquidationHeatMap"))
-    g.AddButton("w170 h26", "📚 Binance Depth / Order Book").OnEvent("Click", (*) => Run("https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/websocket-api"))
-    g.AddButton("w170 h26", "❌ Close").OnEvent("Click", (*) => g.Destroy())
-
-    g.Show("AutoSize")
-    CT["liqGui"] := g
-
-    TrayTip("📉 Liquidation Tracker", "Liquidation tools opened from popup.", 2)
 }
 
 ; ============================================================
@@ -848,6 +653,8 @@ CT_ClearAlertRules() {
     TrayTip("🧹 Alerts", "All rules cleared.", 2)
 }
 
+; เช็คราคาทุก alertMs — ถ้า widget เปิดอยู่แล้ว ใช้ราคาที่ widget เพิ่งดึงมาแทน
+; ไม่ยิง API ซ้ำซ้อนกัน 2 ชุดพร้อมกัน (ประหยัด quota / ลดโอกาสโดน rate limit)
 CT_CheckAlerts(*) {
     global CT
 
@@ -856,12 +663,17 @@ CT_CheckAlerts(*) {
     if (CT["alertRules"].Length = 0)
         return
 
-    data := CT_GetMarketData()
-    prices := Map(
-        "BTC", data["btc"],
-        "ETH", data["eth"],
-        "SOL", data["sol"]
-    )
+    if (CT["widgetShown"] && CT["lastData"].Count) {
+        lastData := CT["lastData"]
+        prices := Map(
+            "BTC", lastData.Has("btc") ? lastData["btc"] : 0,
+            "ETH", lastData.Has("eth") ? lastData["eth"] : 0,
+            "SOL", lastData.Has("sol") ? lastData["sol"] : 0
+        )
+    } else {
+        data := CT_GetMarketData()
+        prices := Map("BTC", data["btc"], "ETH", data["eth"], "SOL", data["sol"])
+    }
 
     for _, rule in CT["alertRules"] {
         sym := rule["sym"]
