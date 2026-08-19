@@ -191,6 +191,15 @@ AppsKey:: {
 ; ทุกครั้ง ซึ่งช้ากว่า native PDF renderer ของ Acrobat มาก โดยเฉพาะไฟล์ใหญ่
 ; ใช้สวิตช์ /n (เอกสารของ Adobe: เปิดเป็น instance/หน้าต่างใหม่) กัน Acrobat เอาไฟล์ไปเปิด
 ; เป็นแท็บใหม่ในหน้าต่างที่เปิดอยู่แล้ว - ต้องการหน้าต่างแยกเสมอตามที่ผู้ใช้ระบุ
+;
+; ทำไมต้องหา HWND หน้าต่างใหม่เอง แทนที่จะ WinWait("ahk_exe Acrobat.exe") เฉย ๆ:
+; Acrobat เป็นแอปแบบ single-instance - ถ้ามี Acrobat เปิดอยู่ก่อนแล้ว (ซึ่งเป็นกรณีปกติของ
+; ผู้ใช้ที่ใช้ hotkey คลิก annotation ผ่าน mod_AcrobatAVPopupHotkeys.ahk เป็นประจำอยู่แล้ว)
+; process ที่ Run() เปิดตรงนี้จะแค่ส่งสัญญาณไปให้ instance เดิมเปิดไฟล์ แล้วปิดตัวเองทันที
+; ทำให้ WinWait("ahk_exe Acrobat.exe") จับหน้าต่าง Acrobat ที่มีอยู่ก่อนแล้ว (ซึ่งอาจ maximize
+; อยู่แล้วจากก่อนหน้า ทำให้ดูเหมือน WinMaximize ไม่มีผล) แทนที่จะเป็นหน้าต่างใหม่ที่เพิ่งเปิดจริง ๆ
+; แก้โดยจด HWND ของหน้าต่าง Acrobat ทั้งหมดที่มีอยู่ก่อน Run() แล้วหลังจากนั้น poll หา HWND ที่
+; ไม่เคยอยู่ในลิสต์เดิม นั่นคือหน้าต่างใหม่แน่นอน
 OpenPdfInAcrobat(path) {
     acrobat := "C:\Program Files\Adobe\Acrobat DC\Acrobat\Acrobat.exe"
 
@@ -202,12 +211,43 @@ OpenPdfInAcrobat(path) {
         return
     }
 
+    existing := WinGetList("ahk_exe Acrobat.exe")
+
     Run('"' acrobat '" /n "' path '"')
 
-    if WinWait("ahk_exe Acrobat.exe", , 5) {
-        WinActivate("ahk_exe Acrobat.exe")
-        WinMaximize("ahk_exe Acrobat.exe")
+    newHwnd := 0
+    start := A_TickCount
+    while (A_TickCount - start < 10000) {
+        for hwnd in WinGetList("ahk_exe Acrobat.exe") {
+            isOld := false
+            for old in existing {
+                if (old = hwnd) {
+                    isOld := true
+                    break
+                }
+            }
+            if !isOld {
+                newHwnd := hwnd
+                break
+            }
+        }
+        if newHwnd
+            break
+        Sleep(50)
     }
+
+    if !newHwnd
+        return  ; หาไม่เจอจริง ๆ (Acrobat เปิดช้าผิดปกติ) - ปล่อยผ่าน ไม่ยุ่งกับหน้าต่างอื่นที่ไม่ใช่ของเรา
+
+    WinActivate(newHwnd)
+    WinMaximize(newHwnd)
+
+    ; ความพยายามเบื้องต้นให้ปิดแผง "All Tools"/Comment ที่บางทีเด้งขึ้นอัตโนมัติตอนเปิดไฟล์ -
+    ; Escape เป็นคีย์ที่ปิด overlay/แผงชั่วคราวได้ในหลายโปรแกรมรวมถึง Acrobat แต่ยังไม่ยืนยันว่า
+    ; ปิดแผงที่ค้างอยู่ถาวร (pinned) ได้ 100% เพราะไม่มีเครื่อง Acrobat จริงให้ทดสอบ ถ้าลองแล้ว
+    ; แผงยังไม่ปิด รบกวนบอกชื่อไอคอน/ตำแหน่งปุ่มปิดที่กดอยู่ตอนนี้ จะได้ทำ ControlClick ที่แม่นยำแทน
+    Sleep(400)
+    Send("{Escape}")
 }
 
 

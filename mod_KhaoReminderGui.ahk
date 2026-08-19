@@ -261,27 +261,14 @@ KhaoRem_OnItemCheck(LV, RowNumber, Checked) {
 }
 
 ; ----------------------------
-; คลิกขวา = ลบรายการ
+; คลิกขวา = ลบรายการทันที (ไม่มีเมนู/ปุ่มยืนยันคั่นกลาง)
 ; ----------------------------
 KhaoRem_OnContextMenu(LV, RowNumber, IsRightClick, X, Y) {
     if (RowNumber = 0)
         return
 
     id := Integer(LV.GetText(RowNumber, 5))
-
-    ; X,Y ที่ event นี้ส่งมาเป็นพิกัดจอ (Screen) แต่ Menu.Show() อ้างอิงตาม CoordMode
-    ; ของ "Menu" ซึ่งเป็นคนละ thread จาก event นี้เอง (ไม่ได้สืบทอดจากที่ตั้งไว้ตอน Init)
-    ; ถ้าไม่ตั้งให้ตรงกันตรงนี้ เมนูอาจโผล่ผิดตำแหน่ง (เช่นหลุดจอ) ทำให้ดูเหมือนคลิกขวาแล้ว
-    ; ไม่มีอะไรเกิดขึ้นเลย
-    CoordMode("Menu", "Screen")
-
-    ; ห้ามตั้งชื่อตัวแปรนี้ว่า "menu" - AHK v2 ไม่สนตัวพิมพ์เล็ก/ใหญ่ของชื่อ ดังนั้นตัวแปร local
-    ; ชื่อ menu จะบัง built-in class "Menu" ทั้งฟังก์ชัน แม้แต่ฝั่งขวาของบรรทัดที่ประกาศเอง
-    ; ทำให้ Menu() ทางขวามือถูกตีความเป็นการเรียกตัวแปร menu (ที่ยังไม่มีค่า) แทนที่จะเป็นการสร้าง
-    ; Menu object ใหม่ - นี่คือสาเหตุจริงของ error "local variable has not been assigned a value"
-    ctxMenu := Menu()
-    ctxMenu.Add("🗑 ลบรายการนี้", (*) => KhaoRem_DeleteItem(id))
-    ctxMenu.Show(X, Y)
+    KhaoRem_DeleteItem(id)
 }
 
 KhaoRem_DeleteItem(id) {
