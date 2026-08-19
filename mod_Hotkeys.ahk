@@ -52,7 +52,84 @@ F5:: {
         SetTimer(() => F5PressCount := 0, -400)
     }
 }
-F6::Send("#+s")
+; F6 = คำสั่งเดิม (Win+Shift+S)
+; F6 กด 2 ครั้งติดกันเร็ว ๆ = ยกเลิกคำสั่งเดิม แล้วเข้าโหมด OCR แทน
+global F6_Pending := false
+F6_DoublePressMs := 300
+
+F6:: {
+    global F6_Pending
+
+    if (F6_Pending) {
+        ; กดครั้งที่ 2 ทันเวลา -> ยกเลิกคำสั่งเดิมที่รออยู่ แล้วเข้าโหมด OCR
+        F6_Pending := false
+        SetTimer(F6_RunOriginal, 0)
+        F6_StartOCR()
+        return
+    }
+
+    ; กดครั้งแรก -> รอดูว่าจะมีครั้งที่ 2 ตามมาไหม ก่อนค่อยทำคำสั่งเดิม
+    F6_Pending := true
+    SetTimer(F6_RunOriginal, -F6_DoublePressMs)
+}
+
+F6_RunOriginal() {
+    global F6_Pending
+    F6_Pending := false
+    Send("#+s")
+}
+
+; ===============================
+; F6 double-press: OCR พื้นที่ที่ลากเลือกบนจอ (ญี่ปุ่น/อังกฤษ)
+; ผลลัพธ์เก็บใน Clipboard เฉย ๆ ไม่ paste ให้อัตโนมัติ
+; ===============================
+F6_StartOCR() {
+    static ScreenSnipperProcessName := "ScreenClippingHost.exe"
+
+    savedClip := ClipboardAll()
+    A_Clipboard := ""  ; เคลียร์ไว้ก่อน เพื่อรู้ว่าผู้ใช้ลากเลือกเสร็จแล้วหรือยัง
+
+    RunWait("ms-screenclip:")  ; เปิดโหมดลากเลือกพื้นที่ของ Windows (ไม่ใช่โปรแกรม OCR)
+
+    WinWaitActive("ahk_exe " ScreenSnipperProcessName, , 2)
+    Loop {
+        DllCall("user32.dll\GetCursorPos", "int64P", &pt64 := 0)
+        try {
+            hWnd := DllCall("GetAncestor", "Ptr", DllCall("user32.dll\WindowFromPoint", "int64", pt64, "ptr"), "UInt", 2, "ptr")
+            if WinGetProcessName(hWnd) != ScreenSnipperProcessName
+                break
+        } catch {
+            break
+        }
+        Sleep(50)
+    }
+
+    if !ClipWait(1, 1) {
+        A_Clipboard := savedClip  ; ผู้ใช้กด Esc ไม่ได้ลากเลือกอะไร -> คืนคลิปบอร์ดเดิม
+        return
+    }
+
+    Sleep(100)
+
+    if !DllCall("IsClipboardFormatAvailable", "uint", 2) {  ; 2 = CF_BITMAP
+        A_Clipboard := savedClip
+        return
+    }
+
+    DllCall("OpenClipboard", "ptr", A_ScriptHwnd)
+    hData := DllCall("GetClipboardData", "uint", 2, "ptr")
+    hBitmap := DllCall("User32.dll\CopyImage", "UPtr", hData, "UInt", 0, "Int", 0, "Int", 0, "UInt", 0x2000, "Ptr")
+    DllCall("CloseClipboard")
+
+    try {
+        result := OCR.FromBitmap(hBitmap, {lang: "ja-JP", scale: 2})
+        A_Clipboard := Trim(result.Text)
+        TrayTip("OCR เสร็จแล้ว", "ข้อความอยู่ใน Clipboard แล้ว กด Ctrl+V เพื่อวางเอง", 2)
+    } catch as e {
+        A_Clipboard := savedClip
+        MsgBox("OCR ไม่สำเร็จ: " e.Message)
+    }
+}
 F7::Send "{Delete}"
 F8::WinClose("A")
 F9::Send("# ")
