@@ -124,7 +124,14 @@ CT_StartWidget() {
     x := pos.Has("x") ? pos["x"] : ""
     y := pos.Has("y") ? pos["y"] : ""
 
-    if (x = "" || y = "") {
+    ; ตำแหน่งที่จำไว้อาจอยู่บนจอที่ไม่ได้ต่ออยู่แล้ว (ถอดจอนอก/เปลี่ยนผังจอ) - ถ้าไม่เช็คก่อน
+    ; widget จะถูกสร้างจริง (CT["widgetShown"] เป็น true ปกติ) แต่ไปโผล่นอกขอบเขตจอทั้งหมดที่มีอยู่
+    ; ตอนนี้ ทำให้มองไม่เห็นเลยแม้ toggle สำเร็จ - หน้าตาเหมือน "กด Q 3 ครั้งแล้วไม่มีอะไรเปิดขึ้นมา"
+    vLeft := SysGet(76), vTop := SysGet(77)
+    vRight := vLeft + SysGet(78), vBottom := vTop + SysGet(79)
+    onScreen := (x != "" && y != "" && x >= vLeft && x < vRight && y >= vTop && y < vBottom)
+
+    if !onScreen {
         MonitorGetWorkArea(1, &left, &top, &right, &bottom)
 
         widgetWidth := CT["widgetWidth"]
