@@ -200,6 +200,14 @@ AppsKey:: {
 ; อยู่แล้วจากก่อนหน้า ทำให้ดูเหมือน WinMaximize ไม่มีผล) แทนที่จะเป็นหน้าต่างใหม่ที่เพิ่งเปิดจริง ๆ
 ; แก้โดยจด HWND ของหน้าต่าง Acrobat ทั้งหมดที่มีอยู่ก่อน Run() แล้วหลังจากนั้น poll หา HWND ที่
 ; ไม่เคยอยู่ในลิสต์เดิม นั่นคือหน้าต่างใหม่แน่นอน
+;
+; ทำไมต้องเลือกตาม "ขนาดใหญ่สุด" ไม่ใช่แค่ "อันแรกที่เจอใหม่": Acrobat ไม่ได้สร้างแค่หน้าต่าง
+; เอกสารหลักตอนเปิดไฟล์ - มันสร้างหน้าต่างเล็ก ๆ อื่นด้วย เช่น floating toolbar ของ annotation
+; popup (ตัวเดียวกับที่ mod_AcrobatAVPopupHotkeys.ahk เล็งอยู่) ซึ่งก็นับเป็น "ahk_exe Acrobat.exe"
+; เหมือนกัน ถ้า diff แล้วเจอหน้าต่างเล็กนี้ก่อนแล้วเอาไป WinMaximize ทันที มันจะขยายเต็มจอกลาย
+; เป็นกล่องว่างเปล่า/ขาวทั้งจอ (พื้นที่ client ส่วนใหญ่ไม่มีอะไรวาด) - อาการตรงกับที่รายงานว่า
+; "อีกจอนึงขาวทั้งจอ" เป๊ะ เพราะ popup toolbar อาจไปโผล่คนละจอกับเอกสารหลัก จึงต้องรอเก็บผู้สมัคร
+; หลายตัว แล้วเลือกตัวที่มีพื้นที่ (กว้าง*สูง) มากที่สุด ซึ่งคือหน้าต่างเอกสารจริงเสมอ
 OpenPdfInAcrobat(path) {
     acrobat := "C:\Program Files\Adobe\Acrobat DC\Acrobat\Acrobat.exe"
 
@@ -213,9 +221,15 @@ OpenPdfInAcrobat(path) {
 
     existing := WinGetList("ahk_exe Acrobat.exe")
 
-    Run('"' acrobat '" /n "' path '"')
+    ; /A "navpanes=0&pagemode=none" คือ PDF Open Parameter มาตรฐานของ Adobe (ไม่ใช่การเดา -
+    ; เป็นสเปกที่เอกสารทางการของ Adobe ระบุไว้) สั่งไม่ให้แสดง navigation pane/thumbnails ตอนเปิด
+    ; แต่ต้องบอกตรง ๆ ว่าสเปกนี้มีมาก่อนแผง "All Tools"/"Comment" ของ Acrobat DC ยุคใหม่มาก จึง
+    ; อาจไม่ครอบคลุมสองแผงนั้นโดยตรง - ใส่ไว้เพราะปลอดภัยและมีโอกาสช่วยได้บ้าง ไม่ใช่คำตอบเต็มรูปแบบ
+    Run('"' acrobat '" /n /A "navpanes=0&pagemode=none" "' path '"')
 
     newHwnd := 0
+    bestArea := 0
+    foundGoodAt := 0
     start := A_TickCount
     while (A_TickCount - start < 10000) {
         for hwnd in WinGetList("ahk_exe Acrobat.exe") {
@@ -226,13 +240,29 @@ OpenPdfInAcrobat(path) {
                     break
                 }
             }
-            if !isOld {
+            if isOld
+                continue
+
+            try
+                WinGetPos(&wx, &wy, &ww, &wh, hwnd)
+            catch
+                continue
+
+            area := ww * wh
+            if (area > bestArea) {
+                bestArea := area
                 newHwnd := hwnd
-                break
             }
         }
-        if newHwnd
-            break
+
+        ; เจอหน้าต่างที่ใหญ่พอจะเป็นเอกสารจริงแล้ว (ไม่ใช่ toolbar เล็ก ๆ) - รออีกนิดเผื่อมีตัวที่
+        ; ใหญ่กว่านี้โผล่ตามมา (กันกรณีเอกสารหลักยัง render ขนาดไม่นิ่ง) แล้วค่อยฟันธง
+        if (bestArea >= 500 * 400) {
+            if !foundGoodAt
+                foundGoodAt := A_TickCount
+            if (A_TickCount - foundGoodAt >= 250)
+                break
+        }
         Sleep(50)
     }
 
