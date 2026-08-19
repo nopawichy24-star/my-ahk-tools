@@ -95,14 +95,9 @@ CT_StartWidget() {
 
     CT["ctrl"]["title"] := g.AddText("w170 Center", "╭─ 📊 MARKET ─────────────╮")
 
-    CT["ctrl"]["btc"]      := g.AddText("w170", "🟠 BTC  loading...")
-    CT["ctrl"]["btcSpark"] := g.AddText("w170 cAFAFAF", "▁▁▁▁▁")
-
-    CT["ctrl"]["eth"]      := g.AddText("w170", "🔵 ETH  loading...")
-    CT["ctrl"]["ethSpark"] := g.AddText("w170 cAFAFAF", "▁▁▁▁▁")
-
-    CT["ctrl"]["sol"]      := g.AddText("w170", "🟣 SOL  loading...")
-    CT["ctrl"]["solSpark"] := g.AddText("w170 cAFAFAF", "▁▁▁▁▁")
+    CT["ctrl"]["btc"] := g.AddText("w170", "🟠 BTC  loading...")
+    CT["ctrl"]["eth"] := g.AddText("w170", "🔵 ETH  loading...")
+    CT["ctrl"]["sol"] := g.AddText("w170", "🟣 SOL  loading...")
 
     g.AddText("w170", "")
 
@@ -213,9 +208,14 @@ CT_UpdateWidget(*) {
     data := CT_GetMarketData()
     failed := !data["ok"]
 
-    CT_RenderLine("btc",  "🟠 BTC",     data["btc"],     0, "USD", failed)
-    CT_RenderLine("eth",  "🔵 ETH",     data["eth"],     0, "USD", failed)
-    CT_RenderLine("sol",  "🟣 SOL",     data["sol"],     0, "USD", failed)
+    ; กราฟเล็ก ๆ ต่อท้ายบรรทัดราคาเลย แทนที่จะแยกเป็นบรรทัดของตัวเอง (กินพื้นที่น้อยลง)
+    sparkBTC := failed ? "" : CT_UpdateHistoryAndSpark("btc", data["btc"])
+    sparkETH := failed ? "" : CT_UpdateHistoryAndSpark("eth", data["eth"])
+    sparkSOL := failed ? "" : CT_UpdateHistoryAndSpark("sol", data["sol"])
+
+    CT_RenderLine("btc",  "🟠 BTC",     data["btc"],     0, "USD", failed, sparkBTC)
+    CT_RenderLine("eth",  "🔵 ETH",     data["eth"],     0, "USD", failed, sparkETH)
+    CT_RenderLine("sol",  "🟣 SOL",     data["sol"],     0, "USD", failed, sparkSOL)
     CT_RenderLine("gold", "🥇 GOLD",    data["gold"],    2, "USD", failed)
     CT_RenderLine("jpy",  "💴 JPY/THB", data["jpythb"],  4, "",    failed)
     CT_RenderLine("usd",  "💵 USD/JPY", data["usdjpy"],  2, "",    failed)
@@ -223,14 +223,6 @@ CT_UpdateWidget(*) {
     if (failed) {
         CT["ctrl"]["mcap"].Text := "💰 TOTAL MCAP  ⚠️ N/A"
     } else {
-        sparkBTC := CT_UpdateHistoryAndSpark("btc", data["btc"])
-        sparkETH := CT_UpdateHistoryAndSpark("eth", data["eth"])
-        sparkSOL := CT_UpdateHistoryAndSpark("sol", data["sol"])
-
-        CT["ctrl"]["btcSpark"].Text := "   " sparkBTC
-        CT["ctrl"]["ethSpark"].Text := "   " sparkETH
-        CT["ctrl"]["solSpark"].Text := "   " sparkSOL
-
         CT["ctrl"]["mcap"].Text := "💰 TOTAL MCAP  " CT_FormatTrillions(data["total_mcap"])
     }
 
@@ -240,7 +232,7 @@ CT_UpdateWidget(*) {
         : "╭─ 📊 MARKET  " FormatTime(, "HH:mm:ss") " ───────────╮"
 }
 
-CT_RenderLine(key, label, value, decimals := 0, currency := "", failed := false) {
+CT_RenderLine(key, label, value, decimals := 0, currency := "", failed := false, spark := "") {
     global CT
 
     ctrlKey := key
@@ -294,6 +286,9 @@ CT_RenderLine(key, label, value, decimals := 0, currency := "", failed := false)
         ? label "  $" formatted "  " pctText "  " arrow
         : label "  " formatted "  " pctText "  " arrow
 
+    if (spark != "")
+        line .= "  " spark
+
     ctrl.Text := line
 
     ; ---------- COLOR BASED ON DAILY % ----------
@@ -317,7 +312,7 @@ CT_Sparkline(arr) {
     bars := ["▁","▂","▃","▄","▅","▆","▇","█"]
 
     if (arr.Length = 0)
-        return "▁▁▁▁▁▁▁▁▁▁▁"
+        return "▁▁▁▁▁▁"
 
     min := arr[1]
     max := arr[1]
@@ -333,7 +328,7 @@ CT_Sparkline(arr) {
 
     ; ป้องกันกราฟหายเมื่อค่าซ้ำ
     if (range = 0)
-        return "▅▅▅▅▅"
+        return "▅▅▅▅▅▅"
 
     out := ""
 
@@ -364,8 +359,8 @@ CT_UpdateHistoryAndSpark(key, value) {
     hist := CT["history"][key]
     hist.Push(value)
 
-    ; เก็บย้อนหลังสูงสุด 11 จุด เพื่อให้ตรงกับ sparkline ที่แสดง
-    while (hist.Length > 11)
+    ; เก็บย้อนหลังสูงสุด 6 จุด - กราฟเล็ก ๆ ต่อท้ายบรรทัดราคา ไม่กินพื้นที่เยอะ
+    while (hist.Length > 6)
         hist.RemoveAt(1)
 
     return CT_Sparkline(hist)
@@ -499,9 +494,16 @@ CT_OpenLinks() {
 
     tab := g.AddTab3("w280 h300", ["📊 Charts", "📈 Data", "🐋 On-chain"])
 
+    ; ทุกแท็บใช้พื้นที่ทับซ้อนกัน (คนละแท็บ แต่ตำแหน่งจริงบนจอเดียวกัน) จึงต้องกำหนด
+    ; จุดเริ่มต้นของปุ่มแรกในแต่ละแท็บแบบ "ตำแหน่งจริง" ชัดเจน ไม่ปล่อยให้ AHK
+    ; ไล่ต่อจากปุ่มสุดท้ายของแท็บก่อนหน้า (ไม่งั้นแท็บ 2/3 จะเริ่มต่ำเกินจริงจนซ้อนกันมั่ว)
+    tab.GetPos(&tabX, &tabY)
+    firstX := tabX + 14
+    firstY := tabY + 32
+
     ; ---------- แท็บ 1: Charts ----------
     tab.UseTab(1)
-    g.AddText("xs y+10", "TradingView")
+    g.AddText("x" firstX " y" firstY, "TradingView")
     g.AddButton("w260 h26", "📈 BTC").OnEvent("Click", CT_OpenCoinChart.Bind("BTC"))
     g.AddButton("w260 h26", "📈 ETH").OnEvent("Click", CT_OpenCoinChart.Bind("ETH"))
     g.AddButton("w260 h26", "📈 SOL").OnEvent("Click", CT_OpenCoinChart.Bind("SOL"))
@@ -522,7 +524,7 @@ CT_OpenLinks() {
 
     ; ---------- แท็บ 2: Data ----------
     tab.UseTab(2)
-    g.AddButton("xs y+10 w260 h26", "💰 Total Market Cap").OnEvent("Click", (*) => CT_ShowMarketCapPopup())
+    g.AddButton("x" firstX " y" firstY " w260 h26", "💰 Total Market Cap").OnEvent("Click", (*) => CT_ShowMarketCapPopup())
     g.AddButton("w260 h26", "📈 BTC Fear & Greed").OnEvent("Click", (*) => Run("https://alternative.me/crypto/fear-and-greed-index/"))
     g.AddButton("w260 h26", "📊 Funding Rate").OnEvent("Click", (*) => Run("https://www.coinglass.com/FundingRate"))
     g.AddButton("w260 h26", "🧠 Crypto News Feed").OnEvent("Click", (*) => Run("https://cryptopanic.com/"))
@@ -532,13 +534,15 @@ CT_OpenLinks() {
 
     ; ---------- แท็บ 3: On-chain ----------
     tab.UseTab(3)
-    g.AddButton("xs y+10 w260 h26", "🐋 Whale Alert").OnEvent("Click", (*) => Run("https://whale-alert.io/"))
+    g.AddButton("x" firstX " y" firstY " w260 h26", "🐋 Whale Alert").OnEvent("Click", (*) => Run("https://whale-alert.io/"))
     g.AddButton("w260 h26", "🛰 Arkham Intel").OnEvent("Click", (*) => Run("https://platform.arkhamintelligence.com/"))
     g.AddButton("w260 h26", "⛓ Mempool").OnEvent("Click", (*) => Run("https://mempool.space/"))
 
     tab.UseTab()
 
-    g.AddButton("xm y+12 w280 h26", "❌ Close").OnEvent("Click", (*) => g.Destroy())
+    ; ตำแหน่งอิงจากขอบล่างจริงของ Tab3 control (tabY + สูง 300 ที่ประกาศไว้ตอนสร้าง)
+    ; ไม่ใช้ y+ ต่อจากปุ่มสุดท้ายของแท็บ เพราะแต่ละแท็บมีความยาวเนื้อหาไม่เท่ากัน
+    g.AddButton("x" tabX " y" (tabY + 300 + 12) " w280 h26", "❌ Close").OnEvent("Click", (*) => g.Destroy())
 
     g.Show("AutoSize")
     CT["linksGui"] := g

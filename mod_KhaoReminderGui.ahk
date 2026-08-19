@@ -134,7 +134,7 @@ InitKhaoGui() {
         return
 
     khaoGui := Gui("+AlwaysOnTop +ToolWindow", "⏰ KHAO Reminder")
-    khaoGui.BackColor := "0x20232A"
+    khaoGui.BackColor := "0x000000"
     khaoGui.SetFont("s9 cWhite", "Segoe UI")
     khaoGui.MarginX := 10
     khaoGui.MarginY := 10
@@ -147,6 +147,7 @@ InitKhaoGui() {
     khaoLV.ModifyCol(3, 100)
     khaoLV.ModifyCol(4, 40)
     khaoLV.ModifyCol(5, 0)  ; ซ่อนคอลัมน์ id ไว้ใช้ภายใน
+    khaoLV.Opt("+Background000000")
     khaoLV.OnEvent("ItemCheck", KhaoRem_OnItemCheck)
     khaoLV.OnEvent("ContextMenu", KhaoRem_OnContextMenu)
 
@@ -154,7 +155,7 @@ InitKhaoGui() {
     khaoCatDD := khaoGui.AddDropDownList("x+5 yp-3 w100 Choose1", ["งาน", "ส่วนตัว"])
 
     khaoGui.AddText("xm y+8", "รายการ:")
-    khaoTextEdit := khaoGui.AddEdit("x+5 yp-3 w305")
+    khaoTextEdit := khaoGui.AddEdit("x+5 yp-3 w305 cWhite Background000000")
 
     khaoDueChk := khaoGui.AddCheckbox("xm y+10", "ตั้งเวลาเตือน")
     khaoDueChk.OnEvent("Click", KhaoRem_ToggleDuePicker)

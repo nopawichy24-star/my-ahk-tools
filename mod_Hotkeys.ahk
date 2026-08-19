@@ -104,6 +104,7 @@ F6_StartOCR() {
     F6_OCRBusy := true
 
     CoordMode("Mouse", "Screen")
+    CoordMode("ToolTip", "Screen")
 
     monitors := []
     shields := []
@@ -173,11 +174,14 @@ F6_StartOCR() {
 
             if (!hasFrame || x != lastX || y != lastY || w != lastW || h != lastH) {
                 F6_UpdateFrames(monitors, frames, frameVisible, x, y, w, h, 2)
+                ToolTip(w " x " h " px", cx + 16, cy + 16)  ; บอกขนาดที่ลากอยู่ตอนนี้ ติดไปกับเคอร์เซอร์
                 hasFrame := true
                 lastX := x, lastY := y, lastW := w, lastH := h
             }
             Sleep(8)
         }
+
+        ToolTip()  ; เอา tooltip ขนาดออกทันทีที่ปล่อยเมาส์
 
         MouseGetPos(&x2, &y2)
 
