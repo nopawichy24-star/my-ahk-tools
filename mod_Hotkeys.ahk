@@ -230,7 +230,54 @@ F6_StartOCR() {
 F7::Send "{Delete}"
 F8::WinClose("A")
 F9::Send("# ")
-F10::DllCall("LockWorkStation")
+; F10 = คำสั่งเดิม (Lock Workstation)
+; F10 กด 2 ครั้งติดกันเร็ว ๆ = ยกเลิกคำสั่งเดิม แล้วตั้งค่า Registry disablecad = 1 แทน
+global F10_Pending := false
+F10_DoublePressMs := 350
+
+F10:: {
+    global F10_Pending
+
+    if (F10_Pending) {
+        ; กดครั้งที่ 2 ทันเวลา -> ยกเลิกคำสั่งเดิมที่รออยู่ แล้วไปแก้ Registry แทน
+        F10_Pending := false
+        SetTimer(F10_RunOriginal, 0)
+        F10_SetDisableCad()
+        return
+    }
+
+    ; กดครั้งแรก -> รอดูว่าจะมีครั้งที่ 2 ตามมาไหม ก่อนค่อยทำคำสั่งเดิม
+    F10_Pending := true
+    SetTimer(F10_RunOriginal, -F10_DoublePressMs)
+}
+
+F10_RunOriginal() {
+    global F10_Pending
+    F10_Pending := false
+    DllCall("LockWorkStation")
+}
+
+; ===============================
+; F10 double-press: ตั้งค่า Registry HKLM...\Policies\System!disablecad = 1
+; ต้องใช้สิทธิ์ Administrator (HKLM) จึงรัน reg.exe แบบ RunAs แยกโปรเซส
+; เพื่อไม่ต้องรันทั้งสคริปต์เป็น Admin (ถ้ารันทั้งสคริปต์เป็น Admin จะเข้าไปยุ่งกับ
+; หน้าต่างที่ไม่ใช่ Admin ของโปรแกรมอื่น เช่น Excel/Chrome ไม่ได้ เพราะโดน UIPI บล็อก)
+; ทุกครั้งที่ double-press จะมี prompt UAC ขึ้นมาให้กดยืนยัน 1 ครั้ง
+; ===============================
+F10_SetDisableCad() {
+    cmd := A_ComSpec ' /c reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" /v disablecad /t REG_DWORD /d 1 /f'
+
+    try {
+        exitCode := RunWait("*RunAs " cmd, , "Hide")
+
+        if (exitCode = 0)
+            TrayTip("Registry", "ตั้งค่า disablecad = 1 สำเร็จ", 2)
+        else
+            MsgBox("แก้ Registry ไม่สำเร็จ (exit code " exitCode ")")
+    } catch as e {
+        MsgBox("แก้ Registry ไม่สำเร็จ (อาจถูกยกเลิก UAC หรือไม่มีสิทธิ์ Administrator)`n`n" e.Message)
+    }
+}
 
 F11:: {
     static lastWin := 0
