@@ -181,14 +181,14 @@ AppsKey:: {
     }
 
     ; เปิดเป็นหน้าต่าง Edge ใหม่แยกจากแท็บ/หน้าต่างที่เปิดอยู่ แล้ว maximize ทันที
+    ; รอแค่ให้หน้าต่างมีอยู่จริง (WinWait) ไม่รอ OS สลับ focus ให้ (WinWaitActive)
+    ; และตัด AlwaysOnTop + Sleep(800) ที่เหลือจากโค้ดเก่าออก เพราะไม่มีผลต่อความเร็วเปิดไฟล์
+    ; มีแต่ทำให้หน่วงเพิ่มโดยไม่จำเป็น
     Run('msedge.exe --new-window "' path '"')
 
-    if WinWaitActive("ahk_exe msedge.exe", , 5) {
+    if WinWait("ahk_exe msedge.exe", , 5) {
         WinActivate("ahk_exe msedge.exe")
-        WinSetAlwaysOnTop(1, "ahk_exe msedge.exe")
         WinMaximize("ahk_exe msedge.exe")
-        Sleep(800)
-        WinSetAlwaysOnTop(0, "ahk_exe msedge.exe")
     }
 }
 

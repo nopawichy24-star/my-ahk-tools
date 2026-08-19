@@ -20,19 +20,64 @@ GroupAdd "AcrobatApps", "ahk_exe AcroRd32.exe"
 global g_AcroHotkeysEnabled := false
 SC002_WINDOW_MS := 650
 global g_sc002Count := 0
+global g_sc002Gen := 0        ; token ของตำแหน่งเมาส์ต้นฉบับ คงที่ตลอด gesture การกด 1 รอบเดียวกัน
+global g_sc002PressSeq := 0   ; เพิ่มทุกครั้งที่กด 1 ใช้แยกว่า timer ของการกดครั้งไหนยังเป็นตัวล่าสุด
 
 STEP_DELAY  := 70
 RETRY_SLEEP := 45
 RETRY_COUNT := 6
 
 ; =========================
-; คืนตำแหน่งเมาส์กลับจุดเดิม (บันทึกตำแหน่งก่อนคลิก แล้วคืนกลับหลังคลิกเสร็จ)
-; ใช้พิกัดแบบ Screen (พิกเซลจริง) แทน Client เดิม เพราะสคริปต์ตั้ง DPI awareness
-; ไว้แล้วด้านบนสุดของไฟล์ (SetProcessDpiAwarenessContext) พิกัด Screen จึงตรงเป๊ะ
-; ทุกจอแม้แต่ละจอจะขนาด/สเกลไม่เท่ากัน (ไม่ต้องแปลงพิกัดต่อจอเอง)
+; คืนตำแหน่งเมาส์กลับจุดเดิม แบบ transaction มี generation token
+; ใช้พิกัดแบบ Screen (พิกเซลจริง) เพราะสคริปต์ตั้ง DPI awareness ไว้แล้วด้านบนสุดของไฟล์
+; (SetProcessDpiAwarenessContext) พิกัด Screen จึงตรงเป๊ะทุกจอแม้แต่ละจอจะขนาด/สเกลไม่เท่ากัน
+;
+; ทำไมต้องมี token/generation: ทุกปุ่มตัวเลขใช้ตัวแปรร่วมกันชุดเดียว (g_SavedMouseX/Y)
+; ถ้ากดปุ่มถัดไปเร็ว ๆ ก่อนที่ delayed restore ของปุ่มก่อนหน้าจะยิง ตัว delayed restore
+; เก่านั้นต้องไม่ยิงไปทับตำแหน่งของ action ใหม่ที่กำลังทำอยู่ - MouseRestore_Begin()
+; จะเพิ่ม generation ทุกครั้งที่เริ่ม action ใหม่ ทำให้ callback ของ generation เก่าเช็คแล้ว
+; รู้ว่าตัวเองล้าสมัยแล้ว ไม่ต้องทำอะไร
 ; =========================
+global g_MouseRestoreGen := 0
 global g_SavedMouseX := 0
 global g_SavedMouseY := 0
+
+; เริ่ม "ธุรกรรม" คืนเมาส์ใหม่: บันทึกตำแหน่งปัจจุบัน + คืน token สำหรับ commit ทีหลัง
+MouseRestore_Begin() {
+    global g_MouseRestoreGen, g_SavedMouseX, g_SavedMouseY
+    g_MouseRestoreGen += 1
+    CoordMode("Mouse", "Screen")
+    MouseGetPos(&g_SavedMouseX, &g_SavedMouseY)
+    return g_MouseRestoreGen
+}
+
+; คืนตำแหน่งเมาส์ตาม token ที่ระบุ (ถ้ายังเป็น generation ล่าสุดอยู่) แล้วตั้ง delayed
+; restore ซ้ำอีกครั้งเผื่อ Acrobat เองขยับเมาส์ช้ากว่าที่เราคืนตอนแรก (เช่น toolbar ลอย
+; มี hover/animation ของตัวเองหลังรับคลิก)
+MouseRestore_Commit(gen) {
+    global g_MouseRestoreGen, g_SavedMouseX, g_SavedMouseY
+
+    if (gen != g_MouseRestoreGen)
+        return  ; มี action ใหม่เริ่มไปแล้วระหว่างนี้ ปล่อยให้ของใหม่จัดการแทน
+
+    x := g_SavedMouseX, y := g_SavedMouseY
+    CoordMode("Mouse", "Screen")
+    MouseMove(x, y, 0)
+
+    ; ตั้ง CoordMode ใหม่ในนี้ด้วย เพราะ SetTimer callback รันเป็นคนละ thread
+    ; ไม่ได้สืบทอด CoordMode จาก thread ที่ตั้งเวลาไว้
+    SetTimer(MouseRestore_DelayedFire.Bind(gen, x, y), -150)
+}
+
+MouseRestore_DelayedFire(gen, x, y) {
+    global g_MouseRestoreGen
+
+    if (gen != g_MouseRestoreGen)
+        return  ; ถูก action ใหม่แทนที่ไปแล้ว ของเก่าไม่ต้องคืนอะไรแล้ว
+
+    CoordMode("Mouse", "Screen")
+    MouseMove(x, y, 0)
+}
 
 ; =========================
 ; OFFSETS
@@ -67,29 +112,8 @@ K0 := [[K7_FIRST_X, K7_FIRST_Y],[K0_SECOND_X, K0_SECOND_Y]]
 
 ; หมายเหตุ: ClickOffset() ใช้ ControlClick ซึ่งไม่ขยับเมาส์จริงระหว่างคลิกอยู่แล้ว
 ; (ControlClick ส่งคลิกตรงเข้า control โดยไม่ต้องย้ายเคอร์เซอร์) ตำแหน่งเมาส์จึงไม่ขยับ
-; ระหว่างคลิกเลย ที่ต้องบันทึก/คืนตรงนี้คือกันไว้เผื่อ Acrobat มีพฤติกรรม
-; focus-follows-mouse หรืออนาคตเปลี่ยนไปใช้การคลิกแบบขยับเมาส์จริง
-SaveMousePos() {
-    global g_SavedMouseX, g_SavedMouseY
-    CoordMode("Mouse", "Screen")
-    MouseGetPos(&g_SavedMouseX, &g_SavedMouseY)
-}
-
-RestoreMousePos() {
-    global g_SavedMouseX, g_SavedMouseY
-    ; ไม่เช็ค WinActive ตรงนี้ (ต่างจาก MoveMouseToEnd เดิม) เพราะจุดประสงค์คือ
-    ; คืนเมาส์กลับให้ผู้ใช้เสมอไม่ว่า Acrobat จะยังโฟกัสอยู่หรือไม่ตอนคลิกเสร็จ
-    ; ถ้าเช็คแล้วบังเอิญ false ช่วงนั้นพอดี จะไม่คืนตำแหน่งให้เลยแบบเงียบ ๆ
-    CoordMode("Mouse", "Screen")
-    MouseMove(g_SavedMouseX, g_SavedMouseY, 0)
-
-    ; คืนซ้ำอีกครั้งหลังหน่วงเล็กน้อย เผื่อ Acrobat เองขยับเมาส์ช้ากว่าที่เราคืนตอนแรก
-    ; (เช่น toolbar ลอยมี hover/animation ของตัวเองหลังรับคลิก) กันเคสที่คืนไปแล้วแต่โดนขยับทับ
-    ; ตั้ง CoordMode ใหม่ในนี้ด้วย เพราะ SetTimer callback รันเป็นคนละ thread ไม่ได้สืบทอด
-    ; CoordMode จาก thread ที่ตั้งเวลาไว้
-    savedX := g_SavedMouseX, savedY := g_SavedMouseY
-    SetTimer(() => (CoordMode("Mouse", "Screen"), MouseMove(savedX, savedY, 0)), -150)
-}
+; ระหว่างคลิกเลย ที่ต้องบันทึก/คืนด้วย MouseRestore_Begin/Commit ด้านบนคือกันไว้เผื่อ
+; Acrobat เองมีพฤติกรรม focus-follows-mouse/hover ขยับเคอร์เซอร์เอง ไม่ใช่เพราะ ControlClick
 
 GetAVPopup(which) {
     for hwnd in WinGetList("ahk_class AVL_AVPopup ahk_group AcrobatApps") {
@@ -147,27 +171,52 @@ ToggleAcrobatHotkeys() {
 }
 
 ; =========================
-; TRIPLE PRESS (ปุ่ม 1)
+; ปุ่ม "1" (SC002): deferred state machine
+; ปุ่มนี้ทำ 2 หน้าที่ปนกัน (คลิก K1 ปกติ / triple-press = toggle เปิดปิดชุดปุ่มลัด)
+; เดิมทุกครั้งที่กด (ครั้งที่ 1, 2) จะคลิก K1 ทันที แล้วค่อยมาพบทีหลังว่าเป็นครั้งที่ 3
+; (triple press) ทำให้กดรัว 3 ครั้งเพื่อ toggle กลายเป็นคลิก K1 ไปก่อน 2 ครั้งโดยไม่ตั้งใจ
+; และแต่ละคลิกนั้นก็ยิง MouseRestore ของตัวเอง ทับกันเองจนตำแหน่งเมาส์สุดท้ายไม่แน่นอน
+;
+; ตอนนี้เปลี่ยนเป็น "รอดูก่อน" (deferred): กดครั้งแรกจะยังไม่ทำอะไร แค่บันทึกตำแหน่งเมาส์
+; ต้นฉบับไว้ครั้งเดียว (ครั้งถัดไปในชุดเดียวกันจะไม่บันทึกทับ) แล้วตั้งเวลารอ
+;   - กดครบ 3 ครั้งภายในเวลา -> ยกเลิก timer ที่รอไว้ ทำ toggle อย่างเดียว (ไม่คลิก)
+;   - หมดเวลาโดยไม่ครบ 3 (คือกดแค่ 1 หรือ 2 ครั้ง) -> ทำพฤติกรรมเดิมคือคลิก K1 "ครั้งเดียว"
+;     (ของเดิมกดกี่ครั้งก็คลิกเท่านั้นครั้ง ซึ่งไม่ใช่ behavior ที่ตั้งใจ แค่เป็นผลพลอยได้
+;     จากดีไซน์เดิมที่ทำงานทันทีทุกครั้งกด - ที่นี่เลยคงไว้แค่ "คลิกได้ผลลัพธ์เหมือนเดิม")
+; ไม่ว่าจะจบแบบไหนก็ตาม จะคืนเมาส์กลับตำแหน่งต้นฉบับเดียวกันเสมอ
 ; =========================
-HandleSC002TriplePress() {
-    global g_sc002Count, SC002_WINDOW_MS
+HandleSC002Press() {
+    global g_sc002Count, g_sc002Gen, g_sc002PressSeq, SC002_WINDOW_MS
 
-    if (A_PriorHotkey = "SC002" && A_TimeSincePriorHotkey <= SC002_WINDOW_MS)
-        g_sc002Count += 1
-    else
-        g_sc002Count := 1
+    if (g_sc002Count = 0)
+        g_sc002Gen := MouseRestore_Begin()  ; บันทึกตำแหน่งต้นฉบับแค่ครั้งแรกของ gesture นี้
+
+    g_sc002Count += 1
+    g_sc002PressSeq += 1
+    mySeq := g_sc002PressSeq
 
     if (g_sc002Count >= 3) {
         g_sc002Count := 0
         ToggleAcrobatHotkeys()
-    } else {
-        global g_AcroHotkeysEnabled
-        if (g_AcroHotkeysEnabled) {
-            SaveMousePos()
-            ClickMultiStep_NoMove(K1)
-            RestoreMousePos()
-        }
+        MouseRestore_Commit(g_sc002Gen)
+        return
     }
+
+    SetTimer(SC002_Timeout.Bind(mySeq), -SC002_WINDOW_MS)
+}
+
+SC002_Timeout(mySeq) {
+    global g_sc002Count, g_sc002Gen, g_sc002PressSeq, g_AcroHotkeysEnabled
+
+    if (mySeq != g_sc002PressSeq)
+        return  ; มีการกดครั้งใหม่มาแทนที่ก่อนหมดเวลา ปล่อยให้ timer ของครั้งใหม่จัดการแทน
+
+    g_sc002Count := 0
+
+    if (g_AcroHotkeysEnabled)
+        ClickMultiStep_NoMove(K1)
+
+    MouseRestore_Commit(g_sc002Gen)
 }
 
 ; =========================================================
@@ -175,18 +224,18 @@ HandleSC002TriplePress() {
 ; =========================================================
 #HotIf WinActive("ahk_group AcrobatApps")
 
-SC002:: HandleSC002TriplePress()
+SC002:: HandleSC002Press()
 
 #HotIf WinActive("ahk_group AcrobatApps") && g_AcroHotkeysEnabled
-SC00B:: (SaveMousePos(), ClickMultiStep_NoMove(K0), RestoreMousePos())
-SC003:: (SaveMousePos(), ClickMultiStep_NoMove(K2), RestoreMousePos())
-SC004:: (SaveMousePos(), ClickMultiStep_NoMove(K3), RestoreMousePos())
-SC005:: (SaveMousePos(), ClickSingle_NoMove(K4[1]), RestoreMousePos())
-SC006:: (SaveMousePos(), ClickMultiStep_NoMove(K5), RestoreMousePos())
-SC007:: (SaveMousePos(), ClickMultiStep_NoMove(K6), RestoreMousePos())
-SC008:: (SaveMousePos(), ClickMultiStep_NoMove(K7), RestoreMousePos())
-SC009:: (SaveMousePos(), ClickMultiStep_NoMove(K8), RestoreMousePos())
-SC00A:: (SaveMousePos(), ClickMultiStep_NoMove(K9), RestoreMousePos())
+SC00B:: (gen := MouseRestore_Begin(), ClickMultiStep_NoMove(K0), MouseRestore_Commit(gen))
+SC003:: (gen := MouseRestore_Begin(), ClickMultiStep_NoMove(K2), MouseRestore_Commit(gen))
+SC004:: (gen := MouseRestore_Begin(), ClickMultiStep_NoMove(K3), MouseRestore_Commit(gen))
+SC005:: (gen := MouseRestore_Begin(), ClickSingle_NoMove(K4[1]), MouseRestore_Commit(gen))
+SC006:: (gen := MouseRestore_Begin(), ClickMultiStep_NoMove(K5), MouseRestore_Commit(gen))
+SC007:: (gen := MouseRestore_Begin(), ClickMultiStep_NoMove(K6), MouseRestore_Commit(gen))
+SC008:: (gen := MouseRestore_Begin(), ClickMultiStep_NoMove(K7), MouseRestore_Commit(gen))
+SC009:: (gen := MouseRestore_Begin(), ClickMultiStep_NoMove(K8), MouseRestore_Commit(gen))
+SC00A:: (gen := MouseRestore_Begin(), ClickMultiStep_NoMove(K9), MouseRestore_Commit(gen))
 
 #HotIf
 
