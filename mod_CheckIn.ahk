@@ -169,9 +169,34 @@ LaunchApps() {
 
 
 ;----------------------------------------
-; AppsKey = เปิดไฟล์ผังที่นั่ง (座席表)
+; AppsKey = เปิดไฟล์ผังที่นั่ง (座席表) ตอนกด 1 ครั้ง
+; กด 2 ครั้งติดกันเร็ว ๆ = ยกเลิกคำสั่งเดิม แล้วส่ง Ctrl+F ไปที่หน้าต่างที่ active อยู่แทน
+; รูปแบบ deferred single/double press เดียวกับ F6/F10 ในไฟล์นี้/mod_Hotkeys.ahk - รอดูก่อนว่า
+; จะมีครั้งที่ 2 ตามมาไหม ก่อนค่อยเรียกฟังก์ชันเดิม กันไม่ให้ single-click ทำงานไปก่อนโดยไม่ตั้งใจ
+; ตอน double-click
 ;----------------------------------------
+global AppsKey_Pending := false
+AppsKey_DoublePressMs := 400
+
 AppsKey:: {
+    global AppsKey_Pending
+
+    if (AppsKey_Pending) {
+        ; กดครั้งที่ 2 ทันเวลา -> ยกเลิกคำสั่งเดิมที่รออยู่ แล้วทำ double-click แทน
+        AppsKey_Pending := false
+        SetTimer(AppsKey_RunSingle, 0)
+        AppsKey_RunDouble()
+        return
+    }
+
+    ; กดครั้งแรก -> รอดูว่าจะมีครั้งที่ 2 ตามมาไหม ก่อนค่อยเปิด PDF
+    AppsKey_Pending := true
+    SetTimer(AppsKey_RunSingle, -AppsKey_DoublePressMs)
+}
+
+AppsKey_RunSingle() {
+    global AppsKey_Pending
+    AppsKey_Pending := false
 
     path := "C:\Users\U004797\Desktop\販売管理\連絡\本社3F 座席表 260806.pdf"
 
@@ -181,6 +206,12 @@ AppsKey:: {
     }
 
     OpenPdfInAcrobat(path)
+}
+
+; Double-click AppsKey: ไม่เปิด PDF - ส่ง Ctrl+F ไปที่หน้าต่าง/โปรแกรมที่ active อยู่ตอนนั้น
+; (Send ไม่ระบุ target จะส่งไปที่หน้าต่างที่ OS โฟกัสอยู่ปัจจุบันเสมอ ตามโครงสร้างเดิมของสคริปต์)
+AppsKey_RunDouble() {
+    Send("^f")
 }
 
 ;----------------------------------------
