@@ -107,6 +107,13 @@ F6_StartOCR() {
         return
     F6_OCRBusy := true
 
+    ; ต้องการ per-monitor DPI awareness แบบ "จริง" เฉพาะช่วงสร้าง/ขยับกรอบ F6 เท่านั้น (กันกรอบ
+    ; เพี้ยนบนจอที่สเกลต่างจากจอหลัก) - ตั้งแบบ scope เฉพาะฟังก์ชันนี้ (SetThreadDpiAwarenessContext
+    ; คืนค่า context เดิมกลับมาให้เลย) แล้วคืนค่าเดิมใน finally เสมอ เพราะถ้าตั้งไว้แบบ global
+    ; ทั้งสคริปต์ (เคยทำมาก่อน) จะทำให้ A_ScreenDPI ที่ mod_AcrobatAVPopupHotkeys.ahk ใช้คำนวณ
+    ; offset ปุ่มคลิก Acrobat (SHIFT_PX_UP) ตอนโหลดสคริปต์เปลี่ยนค่าไปจากที่ผู้ใช้ปรับเทียบไว้
+    prevDpiCtx := DllCall("SetThreadDpiAwarenessContext", "ptr", -4, "ptr")
+
     CoordMode("Mouse", "Screen")
     CoordMode("ToolTip", "Screen")
 
@@ -240,6 +247,9 @@ F6_StartOCR() {
     } catch as e {
         MsgBox("OCR ไม่สำเร็จ: " e.Message)
     } finally {
+        ; คืน DPI awareness context กลับเป็นของเดิมเสมอ ไม่ว่า F6 จะจบแบบไหน (สำเร็จ/ยกเลิก/error)
+        ; กันไม่ให้ค่าที่ตั้งไว้ระหว่างวาดกรอบหลุดรอดไปกระทบโค้ดส่วนอื่นของสคริปต์ที่รันทีหลัง
+        DllCall("SetThreadDpiAwarenessContext", "ptr", prevDpiCtx, "ptr")
         ToolTip()
         for sg in shields
             sg.Destroy()

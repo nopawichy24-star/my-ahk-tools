@@ -5,18 +5,11 @@
 #MaxThreadsPerHotkey 10
 
 ; ================= DPI AWARE =================
-; ทำให้รองรับหลายจอ + scaling ต่างกัน
-;
-; ใช้ SetThreadDpiAwarenessContext ไม่ใช่ SetProcessDpiAwarenessContext เพราะ AutoHotkey สร้าง
-; hidden window หลักของตัวเองไปแล้วตั้งแต่ตอน process เริ่มทำงาน ก่อนโค้ด script บรรทัดแรกจะรัน
-; ด้วยซ้ำ - Windows จะปฏิเสธ SetProcessDpiAwarenessContext แบบเงียบ ๆ (คืนค่า false โดยสคริปต์
-; ไม่เคยเช็ค) ทันทีที่ process มี top-level window อยู่แล้วแม้แต่บานเดียว ทำให้ตัวแปรพิกัดเมาส์
-; (MouseGetPos/GetCursorPos) ยังคงถูกต้องเป๊ะทุกจอเสมอ (ไม่ขึ้นกับ DPI awareness ของ process
-; ที่เรียก) แต่หน้าต่างที่ script สร้างเอง (เช่นกรอบ F6) จะถูก DWM scale/ขยับพิกัดผิดเพี้ยนทันทีที่
-; ไปอยู่บนจอที่ scale ต่างจากจอหลัก เพราะ process ยังไม่ได้เป็น Per-Monitor DPI aware จริง ๆ
-; SetThreadDpiAwarenessContext เปลี่ยนได้ทุกเมื่อระดับ thread โดยไม่ติดข้อจำกัดนี้ และ AutoHotkey
-; รันทุกอย่าง (hotkey/timer/gui) บน OS thread เดียวกันหมด เรียกครั้งเดียวตรงนี้จึงพอสำหรับทั้งสคริปต์
-DllCall("SetThreadDpiAwarenessContext", "ptr", -4, "ptr")
+; หมายเหตุ: ไฟล์นี้เคยตั้ง thread DPI awareness เป็น per-monitor แบบ global ทั้งสคริปต์ตรงนี้
+; (เพื่อแก้กรอบ F6 บนจอสเกลต่างกัน) แต่ทำให้ A_ScreenDPI ที่ใช้คำนวณ SHIFT_PX_UP ด้านล่าง
+; (สำหรับ K8/K9) เปลี่ยนค่าไปจากตอนที่ผู้ใช้ปรับเทียบ offset ปุ่มคลิกไว้แต่แรก ทำให้คลิกไม่ลงจุด
+; ย้าย DPI awareness ไปตั้งแบบ scope เฉพาะช่วงสร้าง/ขยับกรอบ F6 ใน F6_StartOCR
+; (mod_Hotkeys.ahk) แทน เพื่อให้ A_ScreenDPI ตรงนี้กลับไปเป็นค่าเดิมที่ผู้ใช้ปรับเทียบไว้
 
 ; =========================================================
 ; Acrobat / Reader Group
