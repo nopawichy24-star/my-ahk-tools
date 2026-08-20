@@ -38,11 +38,14 @@ RETRY_SLEEP := 45
 RETRY_COUNT := 6
 
 ; =========================
-; ย้ายเมาส์ไปกึ่งกลางจอที่กำลังใช้งานอยู่ (ไม่ใช่คืนตำแหน่งเดิมแบบก่อนหน้านี้) แบบ transaction
-; มี generation token เหมือนเดิม
-; ใช้พิกัดแบบ Screen (พิกเซลจริง) เพราะสคริปต์ตั้ง DPI awareness ไว้แล้วด้านบนสุดของไฟล์
-; (SetThreadDpiAwarenessContext) พิกัด Screen จึงตรงเป๊ะทุกจอแม้แต่ละจอจะขนาด/สเกลไม่เท่ากัน -
-; MonitorGet() จึงคืนขอบเขตจอจริงเป็นพิกเซลจริงด้วยเช่นกัน ไม่ถูก virtualize/scale ผิดจอ
+; คืนตำแหน่งเมาส์กลับจุดเดิมก่อนกด (ย้อนกลับจากที่เคยเปลี่ยนเป็น "ไปกึ่งกลางจอ" ไปแล้ว) แบบ
+; transaction มี generation token เหมือนเดิม
+;
+; ทำไมต้องย้อนกลับ: การบังคับย้ายเมาส์ไปกึ่งกลางจอทันทีหลังคลิก ทำให้เคอร์เซอร์เคลื่อนออกจาก
+; บริเวณ floating toolbar ของ Acrobat (AVL_AVPopup) ซึ่งพฤติกรรมทั่วไปของ toolbar ลอยแบบนี้คือ
+; ซ่อนตัวเอง/ปิดไปเมื่อเมาส์เคลื่อนออกจากบริเวณมัน - พอกดปุ่มตัวเลขถัดไปเร็ว ๆ ติดกัน
+; GetAVPopup() เลยหาไม่เจอหรือเจอ popup ที่สถานะไม่ตรงแล้ว ทำให้คลิกไม่ลงจุดที่ต้องการ
+; คืนกลับเป็นคืนตำแหน่งเดิมแทน เพราะเมาส์จะได้ไม่ขยับออกจากบริเวณ toolbar โดยไม่จำเป็น
 ;
 ; ทำไมต้องมี token/generation: ทุกปุ่มตัวเลขใช้ตัวแปรร่วมกันชุดเดียว (g_SavedMouseX/Y)
 ; ถ้ากดปุ่มถัดไปเร็ว ๆ ก่อนที่ delayed restore ของปุ่มก่อนหน้าจะยิง ตัว delayed restore
@@ -54,37 +57,17 @@ global g_MouseRestoreGen := 0
 global g_SavedMouseX := 0
 global g_SavedMouseY := 0
 
-; หาว่าจุด (px,py) อยู่บนจอไหน แล้วคืนจุดกึ่งกลางของจอนั้น (fallback ไปจอ primary
-; ถ้าหาไม่เจอจริง ๆ - ปกติไม่ควรเกิดเพราะจุดมาจาก MouseGetPos บนจอใดจอหนึ่งเสมอ)
-GetMonitorCenter(px, py, &cx, &cy) {
-    Loop MonitorGetCount() {
-        MonitorGet(A_Index, &l, &t, &r, &b)
-        if (px >= l && px < r && py >= t && py < b) {
-            cx := (l + r) // 2
-            cy := (t + b) // 2
-            return
-        }
-    }
-    MonitorGet(MonitorGetPrimary(), &l, &t, &r, &b)
-    cx := (l + r) // 2
-    cy := (t + b) // 2
-}
-
-; เริ่ม "ธุรกรรม" ย้ายเมาส์ใหม่: หาจอที่เมาส์อยู่ตอนนี้ คำนวณจุดกึ่งกลางจอนั้นเก็บไว้
-; (ไม่ใช่ตำแหน่งเมาส์ดิบแบบเดิม) + คืน token สำหรับ commit ทีหลัง
+; เริ่ม "ธุรกรรม" คืนเมาส์ใหม่: บันทึกตำแหน่งปัจจุบัน + คืน token สำหรับ commit ทีหลัง
 MouseRestore_Begin() {
     global g_MouseRestoreGen, g_SavedMouseX, g_SavedMouseY
     g_MouseRestoreGen += 1
     CoordMode("Mouse", "Screen")
-    MouseGetPos(&mx, &my)
-    GetMonitorCenter(mx, my, &cx, &cy)
-    g_SavedMouseX := cx
-    g_SavedMouseY := cy
+    MouseGetPos(&g_SavedMouseX, &g_SavedMouseY)
     return g_MouseRestoreGen
 }
 
-; ย้ายเมาส์ไปกึ่งกลางจอตาม token ที่ระบุ (ถ้ายังเป็น generation ล่าสุดอยู่) แล้วตั้ง delayed
-; move ซ้ำอีกครั้งเผื่อ Acrobat เองขยับเมาส์ช้ากว่าที่เราย้ายตอนแรก (เช่น toolbar ลอย
+; คืนตำแหน่งเมาส์ตาม token ที่ระบุ (ถ้ายังเป็น generation ล่าสุดอยู่) แล้วตั้ง delayed
+; restore ซ้ำอีกครั้งเผื่อ Acrobat เองขยับเมาส์ช้ากว่าที่เราคืนตอนแรก (เช่น toolbar ลอย
 ; มี hover/animation ของตัวเองหลังรับคลิก)
 MouseRestore_Commit(gen) {
     global g_MouseRestoreGen, g_SavedMouseX, g_SavedMouseY
