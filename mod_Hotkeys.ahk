@@ -595,9 +595,32 @@ ShutdownCancel() {
 SC137::Send("^a")
 
 ; ===============================
-; SC070: เปิดไฟล์รายชื่อฝ่ายขาย (営業(ひら))
+; SC070: เปิดไฟล์รายชื่อฝ่ายขาย (営業(ひら)) ตอนกด 1 ครั้ง
+; กด 2 ครั้งติดกันเร็ว ๆ = ยกเลิกคำสั่งเดิม แล้วสลับไป Excel เปิด filter ของคอลัมน์ J แทน
+; รูปแบบ deferred single/double press เดียวกับ F6/F10 - รอดูก่อนว่าจะมีครั้งที่ 2 ตามมาไหม
+; ก่อนค่อยเปิด PDF กันไม่ให้ single-click ทำงานไปก่อนโดยไม่ตั้งใจตอน double-click
 ; ===============================
+global SC070_Pending := false
+SC070_DoublePressMs := 400
+
 SC070:: {
+    global SC070_Pending
+
+    if (SC070_Pending) {
+        SC070_Pending := false
+        SetTimer(SC070_RunSingle, 0)
+        SC070_RunDouble()
+        return
+    }
+
+    SC070_Pending := true
+    SetTimer(SC070_RunSingle, -SC070_DoublePressMs)
+}
+
+SC070_RunSingle() {
+    global SC070_Pending
+    SC070_Pending := false
+
     path := "C:\Users\U004797\Desktop\販売管理\連絡\営業(ひら).pdf"
 
     if !FileExist(path) {
@@ -608,4 +631,60 @@ SC070:: {
     ; ใช้ Acrobat.exe ตรง ๆ แทน Edge (เร็วกว่า - ไม่ต้องรอเปิดเบราว์เซอร์) ผ่าน helper
     ; ตัวเดียวกับ AppsKey ใน mod_CheckIn.ahk (OpenPdfInAcrobat) กันโค้ดซ้ำ
     OpenPdfInAcrobat(path)
+}
+
+; Double-click SC070: ไม่เปิด PDF - สลับไป Excel แล้วเปิด filter dropdown ของคอลัมน์ J
+; พร้อม focus ช่อง search ของ filter ให้พิมพ์ได้ทันที
+;
+; วิธีที่ใช้: เลือก cell หัวตารางของคอลัมน์ J ด้วย COM (Range.Select) แล้วส่ง Alt+Down ซึ่งเป็น
+; keyboard shortcut มาตรฐานของ Excel เองสำหรับ "เปิด filter dropdown ของคอลัมน์ที่ active cell
+; อยู่" - Excel รุ่นใหม่ (365/2019+) จะ focus ช่อง search ของ dropdown ให้อัตโนมัติอยู่แล้วเมื่อ
+; เปิดผ่านคีย์ลัดนี้ ไม่ต้องเสี่ยงใช้ UI Automation เดินหา element เอง (จะพังง่ายเมื่อ Excel
+; อัปเดตเวอร์ชัน) และไม่ต้องอ้างพิกัดเมาส์ fix ตำแหน่งเลย - เลือก cell ผ่าน COM ได้แม่นยำเสมอ
+; ไม่ว่าหน้าต่าง Excel จะอยู่ตำแหน่ง/ขนาดไหน
+SC070_RunDouble() {
+    if !WinExist("ahk_exe EXCEL.EXE") {
+        MsgBox("ไม่พบ Excel ที่กำลังเปิดอยู่")
+        return
+    }
+
+    WinActivate("ahk_exe EXCEL.EXE")
+    if !WinWaitActive("ahk_exe EXCEL.EXE", , 3) {
+        MsgBox("สลับไปหน้าต่าง Excel ไม่สำเร็จ")
+        return
+    }
+
+    try {
+        xl := ComObjActive("Excel.Application")
+    } catch {
+        MsgBox("เชื่อมต่อ Excel ผ่าน COM ไม่สำเร็จ")
+        return
+    }
+
+    try {
+        afRange := xl.ActiveSheet.AutoFilter.Range
+    } catch {
+        MsgBox("ชีตที่ใช้งานอยู่ใน Excel ไม่มี AutoFilter เปิดอยู่")
+        return
+    }
+
+    headerRow := afRange.Row
+    colJ := 10  ; คอลัมน์ J = ลำดับที่ 10 (A=1, B=2, ...)
+    afStartCol := afRange.Column
+    afEndCol := afStartCol + afRange.Columns.Count - 1
+
+    if (colJ < afStartCol || colJ > afEndCol) {
+        MsgBox("คอลัมน์ J ไม่อยู่ในขอบเขตของตาราง AutoFilter ปัจจุบัน")
+        return
+    }
+
+    try
+        xl.ActiveSheet.Range("J" headerRow).Select()
+    catch {
+        MsgBox("เลือก cell หัวตารางคอลัมน์ J ไม่สำเร็จ")
+        return
+    }
+
+    Sleep(150)
+    Send("!{Down}")
 }
