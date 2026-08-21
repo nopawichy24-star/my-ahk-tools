@@ -313,30 +313,83 @@ SC019_Timeout(mySeq) {
 ; ส่วน Alt+U (เลือก "พิมพ์เฉพาะหน้าปัจจุบัน") ผู้ใช้ตรวจสอบเองแล้วว่าถูกต้องกับหน้าต่าง Print
 ; ของ Reader เวอร์ชันที่ใช้อยู่จริง ไม่ใช่การเดา
 ;
-; รอหน้าต่าง Print ด้วย ahk_class #32770 (คลาสมาตรฐานของ dialog บน Windows) แทนการรอด้วย
-; ชื่อหน้าต่าง เพราะชื่ออาจเปลี่ยนไปตามภาษาที่ตั้งไว้ในเครื่อง แต่ class name นี้คงที่ทุกภาษา
+; ROOT CAUSE ของปัญหา "Alt+U ไม่ถูกส่งหลัง Ctrl+P": โค้ดเดิมรอหน้าต่าง Print ด้วย
+; WinWait("ahk_class #32770") ซึ่งสมมติว่า Print dialog ของ Reader เป็น common dialog มาตรฐาน
+; ของ Windows เสมอ แต่ Adobe Reader/Acrobat รุ่นที่ปรับ UI ใหม่ (DC) บาง build ใช้ custom window
+; class ของ Adobe เอง ไม่ใช่ #32770 - เมื่อ class ไม่ตรง WinWait จะรอครบ 3 วินาทีแล้ว timeout
+; ไปเงียบ ๆ (คืนค่า 0) โค้ดจึง return ออกจากฟังก์ชัน "ก่อน" จะถึงบรรทัด PostMessage ของ Alt+U เลย
+; ด้วยซ้ำ - Ctrl+P จึงดูเหมือนทำงาน (หน้าต่างเปิดขึ้นจริง) แต่ Alt+U ไม่เคยถูกส่งออกไปแม้แต่ครั้ง
+; เดียว อาการตรงกับที่รายงานเป๊ะ แก้โดยเลิกเดา class name แล้วเปลี่ยนไปตรวจจับ "หน้าต่างใหม่ของ
+; Reader ที่เพิ่งปรากฏขึ้น" ด้วยการ diff รายชื่อหน้าต่างก่อน/หลังกด Ctrl+P แทน (เทคนิคเดียวกับที่
+; ใช้ใน OpenPdfInAcrobat ของ mod_CheckIn.ahk ที่พิสูจน์แล้วว่าใช้งานได้จริงกับ Acrobat/Reader
+; อยู่แล้ว) ไม่ต้องพึ่งการเดา class/title เลย จึงใช้ได้ไม่ว่า Print dialog จะเป็น class ไหนก็ตาม
 ;
 ; ทำไมต้องส่ง Alt+U ด้วย PostMessage(WM_SYSCHAR) แทน Send("!u") ตรง ๆ: Send("!u") จำลองการกด
 ; แป้นจริงตามตำแหน่ง แล้วให้ Windows แปลเป็นตัวอักษรตาม keyboard layout ที่ "กำลัง active อยู่
 ; ตอนนั้น" - ถ้าเปลี่ยน layout เป็นภาษาไทย แป้นตำแหน่งเดียวกันจะแปลออกมาเป็นอักษรไทยแทน 'u' ทำให้
-; dialog จับ mnemonic ไม่ตรงเลย (ปัญหาคลาสสิกของ Alt+mnemonic กับ layout ที่ไม่ใช่ภาษาอังกฤษ)
-; ส่ง WM_SYSCHAR ตรง ๆ ไปที่หน้าต่าง dialog พร้อมรหัสตัวอักษร 'U' (0x55) ในตัวเองเลย ข้ามขั้นตอน
-; แปลผ่าน physical keyboard layout ไปทั้งหมด จึงได้ผลลัพธ์เหมือนกันไม่ว่าจะตั้ง layout เป็นภาษาไหน
+; dialog จับ mnemonic ไม่ตรงเลย (ปัญหาคลาสสิกของ Alt+mnemonic กับ layout ที่ไม่ใช่ภาษาอังกฤษ -
+; เคยแก้ไว้แล้วก่อนหน้านี้ จึงไม่ย้อนกลับไปใช้ Send("!u") อีกเพื่อไม่ให้บั๊กเดิมนั้นกลับมา) ส่ง
+; WM_SYSCHAR ตรง ๆ ไปที่หน้าต่าง dialog พร้อมรหัสตัวอักษร 'U' (0x55) ในตัวเองเลย ข้ามขั้นตอนแปล
+; ผ่าน physical keyboard layout ไปทั้งหมด จึงได้ผลลัพธ์เหมือนกันไม่ว่าจะตั้ง layout เป็นภาษาไหน
+;
+; ส่วน Ctrl+P ใช้ Send แบบแยก step กด/ปล่อยชัดเจน (Ctrl down -> p down -> p up -> Ctrl up)
+; ตามที่ระบุ แทน Send("^p") ตัวเดียว - ปลอดภัยกับทุก keyboard layout เพราะ Ctrl+ตัวอักษร เป็น
+; accelerator ที่ Windows จับคู่ด้วย virtual-key code ตรง ๆ (ไม่ใช่ mnemonic ที่จับคู่ด้วยตัวอักษร
+; ที่แปลผ่าน layout แบบ Alt+U) จึงไม่มีปัญหาเรื่อง layout แบบเดียวกับ Alt+U - และก่อน/หลังทำงาน
+; ทั้งหมดจะบังคับปล่อย Ctrl/Alt ทุกตัว (ทั้งซ้าย/ขวา) กันไว้เผื่อ modifier ค้างจากรอบก่อนหรือจาก
+; error ระหว่างทาง (ครอบด้วย try/finally ให้ปล่อย modifier แน่นอนไม่ว่าจะเกิด exception หรือไม่)
 SC019_DoPrint() {
-    Send("^p")
+    ; กันไว้ก่อนว่าไม่มี modifier ค้างจากรอบก่อนหน้า (เช่น เคยเกิด error/interrupt กลางทางมาก่อน)
+    Send("{LCtrl up}{RCtrl up}{LAlt up}{RAlt up}")
 
-    dlgHwnd := WinWait("ahk_class #32770", , 3)
-    if !dlgHwnd {
-        MsgBox("เปิดหน้าต่าง Print ไม่สำเร็จ (รอ 3 วินาทีแล้วไม่ขึ้น)")
-        return
+    try {
+        ; จดหน้าต่างทั้งหมดของ Reader/Acrobat ที่มีอยู่ก่อนกด Ctrl+P ไว้ก่อน เพื่อระบุว่าหน้าต่าง
+        ; ไหนคือ Print dialog ที่เพิ่งเปิดขึ้นมาจริง ๆ (ดู comment ด้านบนฟังก์ชันสำหรับเหตุผลเต็ม)
+        existing := WinGetList("ahk_group AcrobatApps")
+
+        Send("{Ctrl down}")
+        Send("{p down}")
+        Send("{p up}")
+        Send("{Ctrl up}")
+
+        dlgHwnd := 0
+        start := A_TickCount
+        while (A_TickCount - start < 3000) {
+            for hwnd in WinGetList("ahk_group AcrobatApps") {
+                isOld := false
+                for old in existing {
+                    if (old = hwnd) {
+                        isOld := true
+                        break
+                    }
+                }
+                if !isOld {
+                    dlgHwnd := hwnd
+                    break
+                }
+            }
+            if dlgHwnd
+                break
+            Sleep(30)
+        }
+
+        if !dlgHwnd {
+            MsgBox("เปิดหน้าต่าง Print ไม่สำเร็จ (รอ 3 วินาทีแล้วไม่พบหน้าต่างใหม่)")
+            return
+        }
+
+        ; รอให้หน้าต่าง Print เป็นหน้าต่าง active/พร้อมรับ input จริง ๆ ก่อนค่อยส่ง Alt+U ต่อ
+        WinWaitActive("ahk_id " dlgHwnd, , 2)
+        Sleep(150)  ; กันกรณี control ภายใน dialog ยัง render ไม่เสร็จแม้หน้าต่าง active แล้ว
+
+        PostMessage(0x106, 0x55, 0, , dlgHwnd)  ; WM_SYSCHAR, wParam = 'U' (0x55) เลือกพิมพ์เฉพาะหน้าปัจจุบัน
+
+        ; หยุดอยู่ตรงนี้ตามที่ผู้ใช้ต้องการ - ห้ามกด Enter/คลิกปุ่ม Print ให้อัตโนมัติเด็ดขาด ผู้ใช้จะ
+        ; กดยืนยันพิมพ์เองที่หน้าต่าง Print โดยตรง จึงไม่มี toast "พิมพ์แล้ว" ตรงนี้ด้วย เพราะยังไม่ได้
+        ; พิมพ์จริง ๆ (รอผู้ใช้กด Print/Enter เองก่อน)
+    } finally {
+        Send("{LCtrl up}{RCtrl up}{LAlt up}{RAlt up}")
     }
-
-    Sleep(200)  ; กันกรณี dialog เพิ่ง render เสร็จแต่ control ต่าง ๆ ยังไม่พร้อมรับ input ทันที
-    PostMessage(0x106, 0x55, 0, , dlgHwnd)  ; WM_SYSCHAR, wParam = 'U' (0x55) เลือกพิมพ์เฉพาะหน้าปัจจุบัน
-
-    ; หยุดอยู่ตรงนี้ตามที่ผู้ใช้ต้องการ - ห้ามกด Enter/คลิกปุ่ม Print ให้อัตโนมัติเด็ดขาด ผู้ใช้จะ
-    ; กดยืนยันพิมพ์เองที่หน้าต่าง Print โดยตรง จึงไม่มี toast "พิมพ์แล้ว" ตรงนี้ด้วย เพราะยังไม่ได้
-    ; พิมพ์จริง ๆ (รอผู้ใช้กด Print/Enter เองก่อน)
 }
 
 ; =========================================================
