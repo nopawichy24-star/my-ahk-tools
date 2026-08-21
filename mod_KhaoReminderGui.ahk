@@ -313,18 +313,6 @@ ShowKhaoGui() {
     KhaoRem_RefreshList()
     khaoGui.Show("AutoSize")
     isKhaoVisible := true
-
-    ; รอให้หน้าต่างนี้ active/พร้อมรับ input จริง ๆ ก่อน แล้วค่อยกด Tab 3 ครั้งอัตโนมัติ (มี delay
-    ; สั้น ๆ คั่นระหว่างแต่ละครั้งกัน control ที่ได้รับ focus ใหม่ยังไม่ทันพร้อมรับ input) - อยู่ใน
-    ; ShowKhaoGui() ที่เดียว จึงทำงานเฉพาะตอน "เปิด" หน้าต่าง (ทั้งจาก CapsLock, Ctrl+CapsLock,
-    ; หรือ path อื่นที่เรียกฟังก์ชันนี้) ไม่ทำงานตอนซ่อน/ปิดหน้าต่าง - ไม่ได้แก้ ToggleKhaoGui() หรือ
-    ; hotkey ที่เปิดหน้าต่างเลย คำสั่งเดิมยังทำงานเหมือนเดิมทุกอย่าง
-    if WinWaitActive("ahk_id " khaoGui.Hwnd, , 2) {
-        Loop 3 {
-            Send("{Tab}")
-            Sleep(30)
-        }
-    }
 }
 
 HideKhaoGui() {
