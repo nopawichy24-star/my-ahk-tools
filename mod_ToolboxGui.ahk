@@ -38,7 +38,8 @@ global extraFileEntries := [
     {label: "🧚 Fairy", path: "C:\Users\U004797\Desktop\Desktop\fairy.ik.local - ショートカット.lnk"},
     {label: "🔧 Product Support", path: "C:\Users\U004797\Desktop\PS"},
     {label: "📮 ポスト", path: "C:\Users\U004797\Desktop\ノッパウィット.lnk"},
-    {label: "📑 成約Excel原本", path: "\\a1a012\$営業公開\○国内営業本部\販売管理部"}
+    {label: "📑 成約Excel原本", path: "\\a1a012\$営業公開\○国内営業本部\販売管理部"},
+    {label: "🗑️ ถังขยะ", path: "shell:RecycleBinFolder"}
 ]
 
 ; control globals
