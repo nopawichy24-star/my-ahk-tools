@@ -1,7 +1,8 @@
 ; mod_KhaoReminderGui.ahk
 ;
 ; KHAO Reminder — เช็คลิสต์ + ตั้งเวลาเตือนจริง
-; กด CapsLock เปิด/ปิด | ติ๊กช่อง = ทำเสร็จแล้ว | คลิกขวารายการ = ลบ
+; กด CapsLock (หรือ Ctrl+CapsLock ถ้า IME ภาษาอื่นแย่ง CapsLock ไปใช้สลับภาษาแทน) เปิด/ปิด
+; | ติ๊กช่อง = ทำเสร็จแล้ว | คลิกขวารายการ = ลบ
 ; บันทึกลงไฟล์อัตโนมัติทุกครั้งที่เพิ่ม/ติ๊ก/ลบ ไม่หายตอนปิดสคริปต์
 
 global khaoGui := 0
@@ -142,7 +143,7 @@ InitKhaoGui() {
     khaoGui.MarginX := 10
     khaoGui.MarginY := 10
 
-    khaoGui.AddText("xm w420 cGray", "กด CapsLock เปิด/ปิด  |  ติ๊กช่อง = ทำเสร็จแล้ว  |  คลิกขวารายการ = ลบ")
+    khaoGui.AddText("xm w420 cGray", "กด CapsLock (หรือ Ctrl+CapsLock ถ้าเปลี่ยนภาษาแล้ว CapsLock ใช้ไม่ได้) เปิด/ปิด  |  ติ๊กช่อง = ทำเสร็จแล้ว  |  คลิกขวารายการ = ลบ")
 
     khaoLV := khaoGui.AddListView("xm y+8 w420 h220 Checked Grid", ["ประเภท", "รายการ", "เตือนเมื่อ", "สถานะ", "id"])
     khaoLV.ModifyCol(1, 70)
@@ -336,3 +337,10 @@ ToggleKhaoGui() {
 }
 
 CapsLock::ToggleKhaoGui()
+
+; สำรอง Ctrl+CapsLock ไว้ด้วย เพราะ CapsLock เฉย ๆ ใช้ไม่ได้ทุกภาษา - บาง IME (เช่น IME
+; ภาษาญี่ปุ่นที่สลับเป็นอังกฤษได้) ผูก CapsLock เดี่ยว ๆ ไว้เป็นปุ่มสลับภาษาที่ระดับ OS/IME เอง
+; ซึ่งดักคีย์นี้ไปก่อนที่สคริปต์จะเห็นด้วยซ้ำ (ไม่ใช่บั๊กของสคริปต์ - เป็นการชนกันระดับ OS ที่
+; แก้จากฝั่ง hook ของสคริปต์ไม่ได้จริง ๆ) Ctrl+CapsLock ไม่ใช่ชุดคีย์ที่ IME ไหนใช้สลับภาษา
+; จึงมั่นใจได้ว่าจะไปถึงสคริปต์เสมอไม่ว่าจะตั้งภาษาอะไรอยู่ก็ตาม
+^CapsLock::ToggleKhaoGui()
