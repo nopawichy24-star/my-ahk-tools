@@ -167,9 +167,13 @@ ClickSingle_NoMove(step) {
     ClickStep(step, "toolbar")
 }
 
-ShowToast(msg, ms := 1200) {
-    ToolTip msg
-    SetTimer(() => ToolTip(), -ms)
+; ใช้ TrayTip แทน ToolTip เดิม (ToolTip โผล่ตรงตำแหน่งเมาส์เท่านั้น) - ตอนกดปุ่ม "1" สามครั้ง
+; หรือ double-press SC019 ผู้ใช้กำลังใช้คีย์บอร์ด/มองที่เอกสารอยู่ เมาส์อาจอยู่คนละจุดกับที่กำลัง
+; มอง ทำให้พลาดไม่เห็น ToolTip เข้าใจผิดว่าฟังก์ชันไม่ทำงานทั้งที่จริงทำงานถูกต้องแล้ว (ไม่พบบั๊ก
+; ในลอจิกนับจำนวนครั้งกด/toggle เลยเมื่อตรวจโค้ด) TrayTip แจ้งในตำแหน่งคงที่มองเห็นได้แน่นอนกว่า
+; แล้วหายไปเองตามที่ Windows กำหนด เหมือน TrayTip ที่ใช้อยู่แล้วทั่วทั้งโปรเจกต์
+ShowToast(msg, opt := 2) {
+    TrayTip("Acrobat", msg, opt)
 }
 
 ToggleAcrobatHotkeys() {
