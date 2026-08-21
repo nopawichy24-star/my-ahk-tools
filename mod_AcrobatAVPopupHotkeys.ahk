@@ -306,16 +306,24 @@ SC019_Timeout(mySeq) {
 ;
 ; รอหน้าต่าง Print ด้วย ahk_class #32770 (คลาสมาตรฐานของ dialog บน Windows) แทนการรอด้วย
 ; ชื่อหน้าต่าง เพราะชื่ออาจเปลี่ยนไปตามภาษาที่ตั้งไว้ในเครื่อง แต่ class name นี้คงที่ทุกภาษา
+;
+; ทำไมต้องส่ง Alt+U ด้วย PostMessage(WM_SYSCHAR) แทน Send("!u") ตรง ๆ: Send("!u") จำลองการกด
+; แป้นจริงตามตำแหน่ง แล้วให้ Windows แปลเป็นตัวอักษรตาม keyboard layout ที่ "กำลัง active อยู่
+; ตอนนั้น" - ถ้าเปลี่ยน layout เป็นภาษาไทย แป้นตำแหน่งเดียวกันจะแปลออกมาเป็นอักษรไทยแทน 'u' ทำให้
+; dialog จับ mnemonic ไม่ตรงเลย (ปัญหาคลาสสิกของ Alt+mnemonic กับ layout ที่ไม่ใช่ภาษาอังกฤษ)
+; ส่ง WM_SYSCHAR ตรง ๆ ไปที่หน้าต่าง dialog พร้อมรหัสตัวอักษร 'U' (0x55) ในตัวเองเลย ข้ามขั้นตอน
+; แปลผ่าน physical keyboard layout ไปทั้งหมด จึงได้ผลลัพธ์เหมือนกันไม่ว่าจะตั้ง layout เป็นภาษาไหน
 SC019_DoPrint() {
     Send("^p")
 
-    if !WinWait("ahk_class #32770", , 3) {
+    dlgHwnd := WinWait("ahk_class #32770", , 3)
+    if !dlgHwnd {
         MsgBox("เปิดหน้าต่าง Print ไม่สำเร็จ (รอ 3 วินาทีแล้วไม่ขึ้น)")
         return
     }
 
     Sleep(200)  ; กันกรณี dialog เพิ่ง render เสร็จแต่ control ต่าง ๆ ยังไม่พร้อมรับ input ทันที
-    Send("!u")
+    PostMessage(0x106, 0x55, 0, , dlgHwnd)  ; WM_SYSCHAR, wParam = 'U' (0x55)
     Sleep(150)
     Send("{Enter}")
 
