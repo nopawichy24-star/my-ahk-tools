@@ -232,33 +232,52 @@ SC002_Timeout(mySeq) {
 }
 
 ; =========================================================
-; SC019 (ปุ่ม "P"): กด 2 ครั้งติดกันเร็ว ๆ = พิมพ์เฉพาะหน้าปัจจุบันทันที (ไม่มี Print dialog)
-; กด 1 ครั้ง = พฤติกรรมเดิมของปุ่ม P ตามปกติ (พิมพ์ตัวอักษร p ถ้ามีช่องข้อความ focus อยู่ ฯลฯ)
+; SC019 (ปุ่ม "P"): แยกเป็น 2 ขั้นตอน
+;   กด 3 ครั้งติดกันเร็ว ๆ = "เปิดใช้งาน" คำสั่งพิมพ์ (ตั้งสถานะ g_SC019_PrintArmed = true)
+;     เท่านั้น - ไม่พิมพ์ทันที และสถานะนี้จะค้างอยู่ตลอด ไม่ reset เอง แม้พิมพ์ไปแล้วก็ตาม
+;     (ต้องกด 3 ครั้งใหม่ทุกครั้งที่เปิดสคริปต์ เพราะ global ตัวนี้เริ่มที่ false เสมอตอนสคริปต์
+;     เริ่มทำงาน)
+;   กด 2 ครั้งติดกันเร็ว ๆ = พิมพ์เฉพาะหน้าปัจจุบันทันที (ไม่มี Print dialog) แต่ทำได้ก็ต่อเมื่อ
+;     g_SC019_PrintArmed เป็น true แล้วเท่านั้น (คือเคยกด 3 ครั้งมาก่อนหน้านี้) ถ้ายังไม่เคยกด
+;     3 ครั้งเลย การกด 2 ครั้งจะไม่พิมพ์ - ทำเหมือนพิมพ์ตัวอักษร p ปกติ 2 ตัวแทน
+;   กด 1 ครั้งแล้วหมดเวลา = พฤติกรรมเดิมของปุ่ม P ตามปกติ (พิมพ์ตัวอักษร p)
 ;
-; ใช้ deferred single/double press แบบเดียวกับ AppsKey/SC070/F6/F10 - กดครั้งแรกไม่ทำอะไรทันที
-; รอดูก่อนว่าจะมีครั้งที่ 2 ตามมาไหม กันไม่ให้การพิมพ์ตัวอักษร p ปกติ (ครั้งเดียว) ไปเรียก
-; ฟังก์ชันพิมพ์เอกสารโดยไม่ตั้งใจ และกันไม่ให้ single-press ทำงานไปก่อนตอน double-press เช่นกัน
+; ใช้ state machine นับจำนวนครั้งกดแบบเดียวกับ SC002 (HandleSC002Press/SC002_Timeout) - ไม่ทำ
+; อะไรทันทีตอนกดครั้งที่ 1 หรือ 2 เลย ต้องรอดูให้ครบ (หมดเวลา หรือกดครบ 3) ก่อนเสมอ กันไม่ให้
+; ครั้งที่ 3 ถูกตีความว่าเป็นครั้งที่ 2 ไปก่อนแล้วโดยไม่ตั้งใจ
 ;
 ; สั่งพิมพ์ผ่าน Acrobat COM (AcroExch.App -> GetActiveDoc -> PrintPages) โดยตรง ไม่ผ่าน Print
 ; dialog เลย เพราะระบุเลขหน้าที่จะพิมพ์ (หน้าปัจจุบันที่ AVPageView กำลังแสดงอยู่) ตรง ๆ ผ่าน
 ; COM ได้แม่นยำอยู่แล้ว ไม่ต้องเดา keyboard navigation ภายใน dialog ที่มองไม่เห็นและตรวจสอบไม่ได้
-;
-; หมายเหตุด้านความปลอดภัย: ยังมีความเสี่ยงที่พิมพ์ตัวอักษร p สองครั้งเร็ว ๆ ในช่องข้อความใด ๆ
-; ของ Acrobat เอง (เช่น ช่อง search, ช่องแสดงความคิดเห็น) จะไปเข้าเงื่อนไข double-press โดยไม่ตั้งใจ
-; ถ้าเกิดปัญหานี้บ่อย แนะนำให้เปลี่ยนไปใช้ปุ่มอื่นที่ชนกับการพิมพ์ข้อความทั่วไปน้อยกว่า
 ; =========================================================
-global SC019_Pending := false
-SC019_DoublePressMs := 400
+global SC019_Count := 0
+global SC019_PressSeq := 0
+global g_SC019_PrintArmed := false
+SC019_WINDOW_MS := 400
 
-SC019_RunSingle() {
-    global SC019_Pending
-    SC019_Pending := false
-    Send("{sc019}")  ; ส่งกลับด้วย scan code ตรง ๆ ให้ modifier (Shift ฯลฯ) ทำงานตามจริงเหมือนไม่ถูกดัก
+SC019_Timeout(mySeq) {
+    global SC019_Count, SC019_PressSeq, g_SC019_PrintArmed
+
+    if (mySeq != SC019_PressSeq)
+        return  ; มีการกดครั้งใหม่มาแทนที่ก่อนหมดเวลา ปล่อยให้ timer ของครั้งใหม่จัดการแทน
+
+    n := SC019_Count
+    SC019_Count := 0
+
+    if (n = 2 && g_SC019_PrintArmed) {
+        SC019_DoPrint()
+        return
+    }
+
+    ; ไม่ใช่กรณีพิมพ์ (กด 1 ครั้ง หรือกด 2 ครั้งแต่ยังไม่เปิดใช้งานคำสั่งพิมพ์) - คืนพฤติกรรมเดิม
+    ; ของปุ่ม p ตามจำนวนครั้งที่กดจริง ด้วย scan code ตรง ๆ ให้ modifier (Shift ฯลฯ) ทำงานตามจริง
+    ; เหมือนไม่เคยถูกดักเลย
+    Loop n
+        Send("{sc019}")
 }
 
-; พิมพ์เฉพาะหน้าปัจจุบันทันทีผ่าน Acrobat COM แล้วโชว์ toast ยืนยันสั้น ๆ (ไม่ใช้ dialog ค้าง
-; เพราะผู้ใช้ต้องการให้พิมพ์ทันที - toast นี้คือ feedback เดียวที่จะได้เห็นว่าเพิ่งสั่งพิมพ์ไป)
-SC019_RunDouble() {
+; พิมพ์เฉพาะหน้าปัจจุบันทันทีผ่าน Acrobat COM แล้วโชว์ข้อความสั้น ๆ ยืนยันว่าพิมพ์แล้ว
+SC019_DoPrint() {
     try {
         app := ComObjActive("AcroExch.App")
         avDoc := app.GetActiveDoc()
@@ -268,7 +287,7 @@ SC019_RunDouble() {
 
         pdDoc.PrintPages(curPage, curPage, 2, true, true)
 
-        ShowToast("🖨 สั่งพิมพ์หน้า " (curPage + 1) " แล้ว")
+        ShowToast("🖨 พิมพ์แล้ว")
     } catch as e {
         MsgBox("สั่งพิมพ์ไม่สำเร็จ: " e.Message)
     }
@@ -282,17 +301,20 @@ SC019_RunDouble() {
 SC002:: HandleSC002Press()
 
 SC019:: {
-    global SC019_Pending
+    global SC019_Count, SC019_PressSeq, g_SC019_PrintArmed
 
-    if (SC019_Pending) {
-        SC019_Pending := false
-        SetTimer(SC019_RunSingle, 0)
-        SC019_RunDouble()
+    SC019_Count += 1
+    SC019_PressSeq += 1
+    mySeq := SC019_PressSeq
+
+    if (SC019_Count >= 3) {
+        SC019_Count := 0
+        g_SC019_PrintArmed := true
+        ShowToast("🖨 เปิดใช้งานคำสั่งพิมพ์แล้ว (กด P 2 ครั้งเพื่อพิมพ์)")
         return
     }
 
-    SC019_Pending := true
-    SetTimer(SC019_RunSingle, -SC019_DoublePressMs)
+    SetTimer(SC019_Timeout.Bind(mySeq), -SC019_WINDOW_MS)
 }
 
 #HotIf WinActive("ahk_group AcrobatApps") && g_AcroHotkeysEnabled
