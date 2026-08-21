@@ -166,7 +166,11 @@ InitKhaoGui() {
     khaoDuePicker := khaoGui.AddDateTime("x+10 yp-3 w240 Choose" A_Now, "yyyy-MM-dd HH:mm")
     khaoDuePicker.Enabled := false
 
-    btnAdd := khaoGui.AddButton("xm y+12 w130 h28", "➕ เพิ่มรายการ")
+    ; "Default" ทำให้ปุ่มนี้ตอบ Enter แบบเดียวกับ default button ของ Win32 dialog ทั่วไป -
+    ; กด Enter ตอนอยู่ในหน้าต่าง Khao Reminder (เช่น พิมพ์ข้อความในช่องรายการค้างอยู่) จะสั่ง Click
+    ; ปุ่มนี้ทันทีโดยอัตโนมัติ เป็นกลไกของ AHK/Win32 เอง ผูกกับ scope ของหน้าต่างนี้เท่านั้น
+    ; ไม่กระทบ Enter ในหน้าต่าง/โปรแกรมอื่นเลย ไม่ต้องเขียน hotkey ดักเพิ่มเอง
+    btnAdd := khaoGui.AddButton("xm y+12 w130 h28 Default", "➕ เพิ่มรายการ")
     btnAdd.OnEvent("Click", KhaoRem_AddItem)
 
     khaoShowDoneBtn := khaoGui.AddButton("x+10 yp w160 h28", "👁 แสดงรายการที่เสร็จ")
@@ -309,6 +313,18 @@ ShowKhaoGui() {
     KhaoRem_RefreshList()
     khaoGui.Show("AutoSize")
     isKhaoVisible := true
+
+    ; รอให้หน้าต่างนี้ active/พร้อมรับ input จริง ๆ ก่อน แล้วค่อยกด Tab 3 ครั้งอัตโนมัติ (มี delay
+    ; สั้น ๆ คั่นระหว่างแต่ละครั้งกัน control ที่ได้รับ focus ใหม่ยังไม่ทันพร้อมรับ input) - อยู่ใน
+    ; ShowKhaoGui() ที่เดียว จึงทำงานเฉพาะตอน "เปิด" หน้าต่าง (ทั้งจาก CapsLock, Ctrl+CapsLock,
+    ; หรือ path อื่นที่เรียกฟังก์ชันนี้) ไม่ทำงานตอนซ่อน/ปิดหน้าต่าง - ไม่ได้แก้ ToggleKhaoGui() หรือ
+    ; hotkey ที่เปิดหน้าต่างเลย คำสั่งเดิมยังทำงานเหมือนเดิมทุกอย่าง
+    if WinWaitActive("ahk_id " khaoGui.Hwnd, , 2) {
+        Loop 3 {
+            Send("{Tab}")
+            Sleep(30)
+        }
+    }
 }
 
 HideKhaoGui() {
