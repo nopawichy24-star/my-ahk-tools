@@ -50,12 +50,29 @@ global g_MouseRestoreGen := 0
 global g_SavedMouseX := 0
 global g_SavedMouseY := 0
 
+; หมายเหตุ DPI awareness (แก้บั๊ก "เมาส์ไม่กลับที่เดิมบนจอรอง"): ฟังก์ชัน 3 ตัวนี้ต้อง
+; MouseGetPos/MouseMove ด้วย per-monitor DPI awareness แบบ "จริง" ไม่งั้นบนจอที่สเกลต่างจาก
+; จอหลัก พิกัดที่ได้/ที่ตั้งจะถูก DWM virtualize ผิดเพี้ยนไป (จอหลักด้วยสเกล 100% เผอิญไม่เพี้ยน
+; เลยดูเหมือนใช้ได้ปกติ) - ไฟล์นี้เคยตั้ง DPI awareness ไว้แบบ global ทั้งสคริปต์มาก่อน แต่ถอด
+; ออกไปแล้ว (ย้ายไปตั้งเฉพาะตอนวาดกรอบ F6 ใน mod_Hotkeys.ahk) เพราะไปกระทบค่า SHIFT_PX_UP
+; ที่คำนวณจาก A_ScreenDPI ตอนโหลดสคริปต์ (ดูคอมเมนต์ด้านบนสุดของไฟล์) จึงต้องตั้งแบบ scope
+; เฉพาะช่วงเรียก MouseGetPos/MouseMove ในนี้แทน - ไม่กระทบ SHIFT_PX_UP เลยเพราะฟังก์ชันพวกนี้
+; ถูกเรียกตอนกด hotkey (runtime) ซึ่งเกิดขึ้นหลังสคริปต์โหลดเสร็จไปนานแล้ว คนละช่วงเวลากับตอน
+; คำนวณ SHIFT_PX_UP ตอนโหลดสคริปต์โดยสิ้นเชิง
+MouseRestore_SetDpiAware() {
+    return DllCall("SetThreadDpiAwarenessContext", "ptr", -4, "ptr")
+}
+
 ; เริ่ม "ธุรกรรม" คืนเมาส์ใหม่: บันทึกตำแหน่งปัจจุบัน + คืน token สำหรับ commit ทีหลัง
 MouseRestore_Begin() {
     global g_MouseRestoreGen, g_SavedMouseX, g_SavedMouseY
     g_MouseRestoreGen += 1
+
+    prevDpiCtx := MouseRestore_SetDpiAware()
     CoordMode("Mouse", "Screen")
     MouseGetPos(&g_SavedMouseX, &g_SavedMouseY)
+    DllCall("SetThreadDpiAwarenessContext", "ptr", prevDpiCtx, "ptr")
+
     return g_MouseRestoreGen
 }
 
@@ -69,8 +86,11 @@ MouseRestore_Commit(gen) {
         return  ; มี action ใหม่เริ่มไปแล้วระหว่างนี้ ปล่อยให้ของใหม่จัดการแทน
 
     x := g_SavedMouseX, y := g_SavedMouseY
+
+    prevDpiCtx := MouseRestore_SetDpiAware()
     CoordMode("Mouse", "Screen")
     MouseMove(x, y, 0)
+    DllCall("SetThreadDpiAwarenessContext", "ptr", prevDpiCtx, "ptr")
 
     ; ตั้ง CoordMode ใหม่ในนี้ด้วย เพราะ SetTimer callback รันเป็นคนละ thread
     ; ไม่ได้สืบทอด CoordMode จาก thread ที่ตั้งเวลาไว้
@@ -83,8 +103,10 @@ MouseRestore_DelayedFire(gen, x, y) {
     if (gen != g_MouseRestoreGen)
         return  ; ถูก action ใหม่แทนที่ไปแล้ว ของเก่าไม่ต้องคืนอะไรแล้ว
 
+    prevDpiCtx := MouseRestore_SetDpiAware()
     CoordMode("Mouse", "Screen")
     MouseMove(x, y, 0)
+    DllCall("SetThreadDpiAwarenessContext", "ptr", prevDpiCtx, "ptr")
 }
 
 ; =========================
@@ -289,7 +311,18 @@ SC019_DoPrint() {
 
         ShowToast("🖨 พิมพ์แล้ว")
     } catch as e {
-        MsgBox("สั่งพิมพ์ไม่สำเร็จ: " e.Message)
+        ; error 0x800401E3 (MK_E_UNAVAILABLE) จาก ComObjActive("AcroExch.App") มักแปลว่าโปรแกรม
+        ; ที่เปิดอยู่ไม่ได้ลงทะเบียน COM object ตัวนี้ไว้ให้เรียกจากภายนอกได้ - สาเหตุที่พบบ่อยที่สุด
+        ; คือใช้ Adobe (Acrobat) Reader ตัวฟรีอยู่ (ไม่ใช่ Acrobat Pro/Standard) ซึ่งปิดกั้นการสั่ง
+        ; พิมพ์แบบอัตโนมัตินี้ไว้ - ใส่คำอธิบาย+วิธีเช็คตรงนี้เลย กันต้องถามซ้ำทุกครั้งที่เจอ error นี้
+        if InStr(e.Message, "800401E3") {
+            MsgBox("สั่งพิมพ์ไม่สำเร็จ (error 0x800401E3 - Acrobat ปฏิเสธคำสั่งนี้)"
+                . "`n`nสาเหตุที่พบบ่อยที่สุด: กำลังใช้ Adobe Reader ตัวฟรีอยู่ ไม่ใช่ Acrobat Pro/Standard"
+                . " ซึ่งปิดกั้นการสั่งพิมพ์อัตโนมัติแบบนี้ไว้"
+                . "`n`nวิธีเช็ค: กด Alt แล้วกด H แล้วกด A (เมนู Help > About) จะขึ้นชื่อโปรแกรมที่แท้จริง")
+        } else {
+            MsgBox("สั่งพิมพ์ไม่สำเร็จ: " e.Message)
+        }
     }
 }
 
