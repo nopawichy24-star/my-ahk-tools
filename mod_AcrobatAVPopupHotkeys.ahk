@@ -228,11 +228,68 @@ SC002_Timeout(mySeq) {
 }
 
 ; =========================================================
+; SC019 (ปุ่ม "P"): กด 2 ครั้งติดกันเร็ว ๆ = พิมพ์เฉพาะหน้าปัจจุบันทันที (ไม่มี Print dialog)
+; กด 1 ครั้ง = พฤติกรรมเดิมของปุ่ม P ตามปกติ (พิมพ์ตัวอักษร p ถ้ามีช่องข้อความ focus อยู่ ฯลฯ)
+;
+; ใช้ deferred single/double press แบบเดียวกับ AppsKey/SC070/F6/F10 - กดครั้งแรกไม่ทำอะไรทันที
+; รอดูก่อนว่าจะมีครั้งที่ 2 ตามมาไหม กันไม่ให้การพิมพ์ตัวอักษร p ปกติ (ครั้งเดียว) ไปเรียก
+; ฟังก์ชันพิมพ์เอกสารโดยไม่ตั้งใจ และกันไม่ให้ single-press ทำงานไปก่อนตอน double-press เช่นกัน
+;
+; สั่งพิมพ์ผ่าน Acrobat COM (AcroExch.App -> GetActiveDoc -> PrintPages) โดยตรง ไม่ผ่าน Print
+; dialog เลย เพราะระบุเลขหน้าที่จะพิมพ์ (หน้าปัจจุบันที่ AVPageView กำลังแสดงอยู่) ตรง ๆ ผ่าน
+; COM ได้แม่นยำอยู่แล้ว ไม่ต้องเดา keyboard navigation ภายใน dialog ที่มองไม่เห็นและตรวจสอบไม่ได้
+;
+; หมายเหตุด้านความปลอดภัย: ยังมีความเสี่ยงที่พิมพ์ตัวอักษร p สองครั้งเร็ว ๆ ในช่องข้อความใด ๆ
+; ของ Acrobat เอง (เช่น ช่อง search, ช่องแสดงความคิดเห็น) จะไปเข้าเงื่อนไข double-press โดยไม่ตั้งใจ
+; ถ้าเกิดปัญหานี้บ่อย แนะนำให้เปลี่ยนไปใช้ปุ่มอื่นที่ชนกับการพิมพ์ข้อความทั่วไปน้อยกว่า
+; =========================================================
+global SC019_Pending := false
+SC019_DoublePressMs := 400
+
+SC019_RunSingle() {
+    global SC019_Pending
+    SC019_Pending := false
+    Send("{sc019}")  ; ส่งกลับด้วย scan code ตรง ๆ ให้ modifier (Shift ฯลฯ) ทำงานตามจริงเหมือนไม่ถูกดัก
+}
+
+; พิมพ์เฉพาะหน้าปัจจุบันทันทีผ่าน Acrobat COM แล้วโชว์ toast ยืนยันสั้น ๆ (ไม่ใช้ dialog ค้าง
+; เพราะผู้ใช้ต้องการให้พิมพ์ทันที - toast นี้คือ feedback เดียวที่จะได้เห็นว่าเพิ่งสั่งพิมพ์ไป)
+SC019_RunDouble() {
+    try {
+        app := ComObjActive("AcroExch.App")
+        avDoc := app.GetActiveDoc()
+        pdDoc := avDoc.GetPDDoc()
+        pageView := avDoc.GetAVPageView()
+        curPage := pageView.GetPageNum()  ; 0-based
+
+        pdDoc.PrintPages(curPage, curPage, 2, true, true)
+
+        ShowToast("🖨 สั่งพิมพ์หน้า " (curPage + 1) " แล้ว")
+    } catch as e {
+        MsgBox("สั่งพิมพ์ไม่สำเร็จ: " e.Message)
+    }
+}
+
+; =========================================================
 ; HOTKEYS
 ; =========================================================
 #HotIf WinActive("ahk_group AcrobatApps")
 
 SC002:: HandleSC002Press()
+
+SC019:: {
+    global SC019_Pending
+
+    if (SC019_Pending) {
+        SC019_Pending := false
+        SetTimer(SC019_RunSingle, 0)
+        SC019_RunDouble()
+        return
+    }
+
+    SC019_Pending := true
+    SetTimer(SC019_RunSingle, -SC019_DoublePressMs)
+}
 
 #HotIf WinActive("ahk_group AcrobatApps") && g_AcroHotkeysEnabled
 SC00B:: (gen := MouseRestore_Begin(), ClickMultiStep_NoMove(K0), MouseRestore_Commit(gen))
