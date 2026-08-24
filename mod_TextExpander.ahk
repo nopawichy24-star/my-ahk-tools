@@ -30,7 +30,15 @@
 ; ENGINE (ใช้ร่วมกันทุกปุ่ม)
 ; ============================================
 
+; ระยะเวลารอดูว่าจะกดครั้งที่ 2 ตามมาไหม - ก่อนหน้านี้ใช้ 400ms ตามค่าเดิมของ SC019/SC002 แต่
+; ปุ่มนั้น (P) ไม่ใช่ตัวอักษรที่พิมพ์บ่อยเท่า J/M ที่ใช้พิมพ์คำปกติทุกวัน ทำให้กดครั้งเดียวธรรมดา
+; (ไม่ตั้งใจ double-press) รู้สึกหน่วง/ขึ้นช้าเห็นได้ชัดเวลาพิมพ์ปกติ ลดลงเหลือ 180ms ให้กดครั้ง
+; เดียวขึ้นเร็วขึ้นชัดเจน แต่ยังพอให้กด double-press ตั้งใจได้ทันอยู่ (เร็วกว่านี้เสี่ยงจับ
+; double-press ตั้งใจไม่ทันสำหรับคนกดไม่ไวมาก)
+JJ_MM_WINDOW_MS := 180
+
 DoublePressPaste_Handle(stateObj, scanCodeStr, template) {
+    global JJ_MM_WINDOW_MS
     stateObj.count += 1
     stateObj.seq += 1
     mySeq := stateObj.seq
@@ -41,7 +49,7 @@ DoublePressPaste_Handle(stateObj, scanCodeStr, template) {
         return
     }
 
-    SetTimer(DoublePressPaste_Timeout.Bind(stateObj, scanCodeStr, mySeq), -400)
+    SetTimer(DoublePressPaste_Timeout.Bind(stateObj, scanCodeStr, mySeq), -JJ_MM_WINDOW_MS)
 }
 
 DoublePressPaste_Timeout(stateObj, scanCodeStr, mySeq) {
