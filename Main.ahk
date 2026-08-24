@@ -16,6 +16,7 @@
 #Include "mod_KhaoReminderGui.ahk"
 #Include "mod_AcrobatAVPopupHotkeys.ahk"
 #Include "mod_CryptoTerminal.ahk"
+#Include "mod_TextExpander.ahk"
 
 ; ============================================
 ; INITIALIZE MODULES
