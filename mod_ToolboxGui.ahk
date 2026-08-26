@@ -25,21 +25,22 @@ global Kato_HP_URL       := "https://www.kato-works.co.jp/"
 ; ---------- FILE LIST ----------
 global fileEntries := [
 
-    {label: "📋 仕様", path: "\\a1a012\$営業公開\○国内営業本部\販売管理部\移行データ2025\☆仕様価格表"},
-    {label: "🔢 コード", path: "\\a1a012\$販管部公開\☆取引先マスタ\☆取引先マスタDATA(参照用).xlsx"},
-    {label: "🤝 成約Excel", path: "C:\Users\U004797\Desktop\販売管理\成約"},
-    {label: "⚙️ AutoHotkey Scripts", path: "C:\Users\U004797\Documents\AutoHotkey"}
-]
-
-global extraFileEntries := [
     {label: "📊 販売管理部", path: "C:\Users\U004797\Desktop\販売管理"},
     {label: "🖨️ スキャン", path: "\\B0c127\スキャン"},
     {label: "👤 個人", path: "\\a1a012\$営業公開\○国内営業本部\販売管理部\個人用フォルダ\カウ"},
     {label: "🧚 Fairy", path: "C:\Users\U004797\Desktop\Desktop\fairy.ik.local - ショートカット.lnk"},
+    {label: "📋 仕様", path: "\\a1a012\$営業公開\○国内営業本部\販売管理部\移行データ2025\☆仕様価格表"},
+    {label: "🔢 コード", path: "\\a1a012\$販管部公開\☆取引先マスタ\☆取引先マスタDATA(参照用).xlsx"},
+    {label: "🤝 成約Excel", path: "C:\Users\U004797\Desktop\販売管理\成約"}
+]
+
+global extraFileEntries := [
     {label: "🔧 Product Support", path: "C:\Users\U004797\Desktop\PS"},
     {label: "📮 ポスト", path: "C:\Users\U004797\Desktop\ノッパウィット.lnk"},
     {label: "📑 成約Excel原本", path: "\\a1a012\$営業公開\○国内営業本部\販売管理部"},
-    {label: "🗑️ ごみ箱", path: "shell:RecycleBinFolder"}
+    {label: "📦 支店送付済_出荷依頼書", path: "\\a1a012\$営業公開\○国内営業本部\販売管理部\個人用フォルダ\カウ\出荷依頼書\CR成約報告書、出荷依頼書.lnk"},
+    {label: "🗑️ ごみ箱", path: "shell:RecycleBinFolder"},
+    {label: "⚙️ AutoHotkey Scripts", path: "C:\Users\U004797\Documents\AutoHotkey"}
 ]
 
 ; control globals
