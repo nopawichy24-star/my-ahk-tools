@@ -27,7 +27,7 @@ global fileEntries := [
 
     {label: "📊 販売管理部", path: "C:\Users\U004797\Desktop\販売管理"},
     {label: "🖨️ スキャン", path: "\\B0c127\スキャン"},
-    {label: "👤 個人", path: "C:\Users\U004797\Desktop\カウ.lnk"},
+    {label: "👤 個人", path: "C:\Users\U004797\Desktop\個人.lnk"},
     {label: "🧚 Fairy", path: "C:\Users\U004797\Desktop\Desktop\fairy.ik.local - ショートカット.lnk"},
     {label: "📋 仕様", path: "\\a1a012\$営業公開\○国内営業本部\販売管理部\移行データ2025\☆仕様価格表"},
     {label: "🔢 コード", path: "\\a1a012\$販管部公開\☆取引先マスタ\☆取引先マスタDATA(参照用).xlsx"},
@@ -36,7 +36,7 @@ global fileEntries := [
 
 global extraFileEntries := [
     {label: "📦 支店送付済_出荷依頼書", path: "\\a1a012\$営業公開\○国内営業本部\販売管理部\個人用フォルダ\カウ\出荷依頼書\CR成約報告書、出荷依頼書.lnk"},
-    {label: "📮 ポスト", path: "C:\Users\U004797\Desktop\ノッパウィット.lnk"},
+    {label: "📮 ポスト", path: "C:\Users\U004797\Desktop\ポスト.lnk"},
     {label: "📑 成約Excel原本", path: "\\a1a012\$営業公開\○国内営業本部\販売管理部"},
     {label: "🔧 Product Support", path: "C:\Users\U004797\Desktop\PS"},
     {label: "🗑️ ごみ箱", path: "shell:RecycleBinFolder"},
