@@ -40,7 +40,7 @@ global extraFileEntries := [
     {label: "📑 成約Excel原本", path: "\\a1a012\$営業公開\○国内営業本部\販売管理部"},
     {label: "🔧 Product Support", path: "C:\Users\U004797\Desktop\PS"},
     {label: "🗑️ ごみ箱", path: "shell:RecycleBinFolder"},
-    {label: "⚙️ AutoHotkey Scripts", path: "C:\Users\U004797\Documents\AutoHotkey"}
+    {label: "⚙️ AutoHotkey Scripts", path: "C:\Users\U004797\Documents\AHK"}
 ]
 
 ; control globals
