@@ -596,31 +596,51 @@ SC137::Send("^a")
 
 ; ===============================
 ; SC070: เปิดไฟล์รายชื่อฝ่ายขาย (営業(ひら)) ตอนกด 1 ครั้ง
-; กด 2 ครั้งติดกันเร็ว ๆ = ยกเลิกคำสั่งเดิม แล้วสลับไป Excel เปิด filter ของคอลัมน์ J แทน
-; รูปแบบ deferred single/double press เดียวกับ F6/F10 - รอดูก่อนว่าจะมีครั้งที่ 2 ตามมาไหม
-; ก่อนค่อยเปิด PDF กันไม่ให้ single-click ทำงานไปก่อนโดยไม่ตั้งใจตอน double-click
+; กด 2 ครั้งติดกันเร็ว ๆ = สลับไป Excel เปิด filter ของคอลัมน์ J
+; กด 3 ครั้งติดกันเร็ว ๆ = เหมือนกด 2 ครั้งทุกอย่าง แต่ใช้คอลัมน์ D แทน J
+;
+; เดิม (ตอนรองรับแค่ 1/2 ครั้ง) กด 2 ครั้งจะสั่งงานทันทีที่ตรวจพบการกดครั้งที่ 2 เลย ไม่ต้องรอ
+; timeout - แต่พอต้องแยกแยะ "กด 2 ครั้งแล้วจบ" ออกจาก "กด 2 ครั้งแล้วจะมีครั้งที่ 3 ตามมาอีก"
+; จำเป็นต้องรอดูให้ครบก่อนเสมอ (ไม่มีทางรู้ล่วงหน้าตอนกดครั้งที่ 2 ว่าจะมีครั้งที่ 3 ตามมาไหม)
+; จึงเปลี่ยนมาใช้ deferred state machine แบบเดียวกับ SC002/SC019 ใน mod_AcrobatAVPopupHotkeys.ahk:
+; นับจำนวนครั้งกด แล้วรอ SC070_DoublePressMs ทุกครั้งก่อนค่อยตัดสินใจว่าเป็น 1/2/3 ครั้ง -
+; ผลคือกด 2 ครั้งจะมีดีเลย์เพิ่มขึ้นเล็กน้อยก่อนเปิด filter (จากเดิมที่ทำทันที) ซึ่งเป็นผลข้างเคียง
+; ที่จำเป็นจากการเพิ่มการแยกแยะ 3 ครั้ง (trade-off เดียวกับที่ SC002 เคยยอมรับมาแล้ว) ส่วน logic
+; การเปิด filter ของคอลัมน์ J เองไม่มีการแก้ไขใด ๆ เลย (ดู SC070_RunFilterOnColumn ด้านล่าง)
 ; ===============================
-global SC070_Pending := false
+global SC070_Count := 0
+global SC070_PressSeq := 0
 SC070_DoublePressMs := 400
 
 SC070:: {
-    global SC070_Pending
+    global SC070_Count, SC070_PressSeq
 
-    if (SC070_Pending) {
-        SC070_Pending := false
-        SetTimer(SC070_RunSingle, 0)
+    SC070_Count += 1
+    SC070_PressSeq += 1
+    mySeq := SC070_PressSeq
+
+    SetTimer(SC070_Timeout.Bind(mySeq), -SC070_DoublePressMs)
+}
+
+SC070_Timeout(mySeq) {
+    global SC070_Count, SC070_PressSeq
+
+    if (mySeq != SC070_PressSeq)
+        return  ; มีการกดครั้งใหม่มาแทนที่ก่อนหมดเวลา ปล่อยให้ timer ของครั้งใหม่จัดการแทน
+
+    n := SC070_Count
+    SC070_Count := 0
+
+    if (n = 1) {
+        SC070_RunSingle()
+    } else if (n = 2) {
         SC070_RunDouble()
-        return
+    } else if (n >= 3) {
+        SC070_RunTriple()
     }
-
-    SC070_Pending := true
-    SetTimer(SC070_RunSingle, -SC070_DoublePressMs)
 }
 
 SC070_RunSingle() {
-    global SC070_Pending
-    SC070_Pending := false
-
     path := "C:\Users\U004797\Desktop\販売管理\連絡\営業(ひら).pdf"
 
     if !FileExist(path) {
@@ -633,8 +653,8 @@ SC070_RunSingle() {
     OpenPdfInAcrobat(path)
 }
 
-; Double-click SC070: ไม่เปิด PDF - สลับไป Excel แล้วเปิด filter dropdown ของคอลัมน์ J
-; พร้อม focus ช่อง search ของ filter ให้พิมพ์ได้ทันที
+; Double-press SC070: ไม่เปิด PDF - สลับไป Excel แล้วเปิด filter dropdown ของคอลัมน์ J
+; พร้อม focus ช่อง search ของ filter ให้พิมพ์ได้ทันที (logic เดิม ไม่ได้แก้ไขอะไรเลย)
 ;
 ; วิธีที่ใช้: เลือก cell หัวตารางของคอลัมน์ J ด้วย COM (Range.Select) แล้วส่ง Alt+Down ซึ่งเป็น
 ; keyboard shortcut มาตรฐานของ Excel เองสำหรับ "เปิด filter dropdown ของคอลัมน์ที่ active cell
@@ -643,6 +663,21 @@ SC070_RunSingle() {
 ; อัปเดตเวอร์ชัน) และไม่ต้องอ้างพิกัดเมาส์ fix ตำแหน่งเลย - เลือก cell ผ่าน COM ได้แม่นยำเสมอ
 ; ไม่ว่าหน้าต่าง Excel จะอยู่ตำแหน่ง/ขนาดไหน
 SC070_RunDouble() {
+    SC070_RunFilterOnColumn("J", 10)  ; คอลัมน์ J = ลำดับที่ 10 (A=1, B=2, ...)
+}
+
+; Triple-press SC070: ทำงานเหมือนกด 2 ครั้งทุกอย่าง (เปิด filter dropdown + focus ช่อง search
+; + Tab 4 ครั้ง) เพียงแต่ใช้คอลัมน์ D แทน J - reuse logic เดียวกันทั้งหมดผ่าน
+; SC070_RunFilterOnColumn เปลี่ยนแค่คอลัมน์เป้าหมาย
+SC070_RunTriple() {
+    SC070_RunFilterOnColumn("D", 4)  ; คอลัมน์ D = ลำดับที่ 4 (A=1, B=2, ...)
+}
+
+; core logic ที่ SC070_RunDouble/SC070_RunTriple เรียกใช้ร่วมกัน รับตัวอักษรคอลัมน์ (ใช้กับ
+; Range เช่น "J"/"D") และลำดับคอลัมน์ (ใช้เช็คขอบเขตตาราง AutoFilter เช่น 10/4) เป็นพารามิเตอร์
+; เนื้อหาขั้นตอนทั้งหมดเหมือนกับ SC070_RunDouble เดิมทุกประการ ไม่มีการเปลี่ยน logic ใด ๆ เลย
+; แค่ดึงมาไว้เป็นฟังก์ชันกลางเพื่อใช้ซ้ำกับคอลัมน์ D ตามที่ร้องขอ
+SC070_RunFilterOnColumn(colLetter, colIndex) {
     if !WinExist("ahk_exe EXCEL.EXE") {
         MsgBox("ไม่พบ Excel ที่กำลังเปิดอยู่")
         return
@@ -669,19 +704,18 @@ SC070_RunDouble() {
     }
 
     headerRow := afRange.Row
-    colJ := 10  ; คอลัมน์ J = ลำดับที่ 10 (A=1, B=2, ...)
     afStartCol := afRange.Column
     afEndCol := afStartCol + afRange.Columns.Count - 1
 
-    if (colJ < afStartCol || colJ > afEndCol) {
-        MsgBox("คอลัมน์ J ไม่อยู่ในขอบเขตของตาราง AutoFilter ปัจจุบัน")
+    if (colIndex < afStartCol || colIndex > afEndCol) {
+        MsgBox("คอลัมน์ " colLetter " ไม่อยู่ในขอบเขตของตาราง AutoFilter ปัจจุบัน")
         return
     }
 
     try
-        xl.ActiveSheet.Range("J" headerRow).Select()
+        xl.ActiveSheet.Range(colLetter headerRow).Select()
     catch {
-        MsgBox("เลือก cell หัวตารางคอลัมน์ J ไม่สำเร็จ")
+        MsgBox("เลือก cell หัวตารางคอลัมน์ " colLetter " ไม่สำเร็จ")
         return
     }
 
