@@ -21,7 +21,7 @@ GroupAdd "AcrobatApps", "ahk_exe AcroRd32.exe"
 ; GLOBALS
 ; =========================
 global g_AcroHotkeysEnabled := false
-SC002_WINDOW_MS := 650
+; ค่าดีเลย์ SC002_WINDOW_MS ย้ายไปรวมไว้ที่ mod_HotkeyTiming.ahk แล้ว
 global g_sc002Count := 0
 global g_sc002Gen := 0        ; token ของตำแหน่งเมาส์ต้นฉบับ คงที่ตลอด gesture การกด 1 รอบเดียวกัน
 global g_sc002PressSeq := 0   ; เพิ่มทุกครั้งที่กด 1 ใช้แยกว่า timer ของการกดครั้งไหนยังเป็นตัวล่าสุด
@@ -284,7 +284,7 @@ SC002_Timeout(mySeq) {
 global SC019_Count := 0
 global SC019_PressSeq := 0
 global g_SC019_PrintArmed := false
-SC019_WINDOW_MS := 400
+; ค่าดีเลย์ SC019_WINDOW_MS ย้ายไปรวมไว้ที่ mod_HotkeyTiming.ahk แล้ว
 
 SC019_Timeout(mySeq) {
     global SC019_Count, SC019_PressSeq, g_SC019_PrintArmed
@@ -337,11 +337,9 @@ SC019_Timeout(mySeq) {
 ; เอง เสมอไป - ส่งทั้งสองเป้าหมายเผื่อกรณี IsDialogMessage ของแต่ละ implementation ต้องการรูปแบบ
 ; ต่างกัน
 ;
-; เพิ่ม log เป็นไฟล์ (sc019_print_debug.log ในโฟลเดอร์เดียวกับสคริปต์) บันทึกทุกขั้นตอน/ทุก key
-; event/hwnd และ title ที่เจอจริง เพื่อให้รอบทดสอบถัดไป (ถ้ายังไม่ได้ผล) มีข้อมูลจริงจากเครื่อง
-; ผู้ใช้มาวิเคราะห์ต่อได้ทันที แทนที่จะต้องเดาใหม่อีกรอบ - หมายเหตุตรงไปตรงมา: session นี้ไม่มี
-; Windows/Adobe Reader ให้รันทดสอบจริง จึงยืนยันผลลัพธ์จริงในเครื่องไม่ได้ ต้องอาศัย log นี้จากการ
-; ทดสอบจริงของผู้ใช้เป็นหลักฐานแทน
+; (ยืนยันแล้วว่า Alt+U ทำงานถูกต้องหลัง fix นี้ - เคยมี logging ไฟล์ sc019_print_debug.log ไว้
+; ช่วย debug ปัญหานี้ตอนยังไม่ยืนยันผล ตอนนี้ถอดออกแล้วเพราะแก้เสร็จและยืนยันผลแล้ว ไม่จำเป็นต้อง
+; เขียน log ทุกครั้งที่พิมพ์อีกต่อไป)
 ;
 ; ทำไมยังส่ง Alt+U ด้วย PostMessage(WM_SYSCHAR) แทน Send("!u") ตรง ๆ: Send("!u") จำลองการกดแป้น
 ; จริงตามตำแหน่ง แล้วให้ Windows แปลเป็นตัวอักษรตาม keyboard layout ที่ active อยู่ตอนนั้น - ถ้า
@@ -358,56 +356,33 @@ SC019_Timeout(mySeq) {
 ; ทำงานทั้งหมดจะบังคับปล่อย Ctrl/Shift/Alt ทุกตัว (ทั้งซ้าย/ขวา) กันไว้เผื่อ modifier ค้างจากรอบ
 ; ก่อนหรือจาก error ระหว่างทาง (ครอบด้วย try/finally ให้ปล่อย modifier แน่นอนไม่ว่าจะเกิด
 ; exception หรือไม่)
-global SC019_LogFile := A_ScriptDir "\sc019_print_debug.log"
-
-SC019_Log(msg) {
-    global SC019_LogFile
-    try FileAppend(A_Hour ":" A_Min ":" A_Sec "." A_MSec " | " msg "`n", SC019_LogFile)
-}
-
 SC019_DoPrint() {
-    SC019_Log("========== SC019_DoPrint START ==========")
-
     ; กันไว้ก่อนว่าไม่มี modifier ค้างจากรอบก่อนหน้า (เช่น เคยเกิด error/interrupt กลางทางมาก่อน)
     Send("{LCtrl up}{RCtrl up}{LShift up}{RShift up}{LAlt up}{RAlt up}")
 
     try {
-        beforeHwnd := WinExist("A")
-        try
-            beforeTitle := WinGetTitle("ahk_id " beforeHwnd)
-        catch
-            beforeTitle := "?"
-        SC019_Log("Active window before Ctrl+P: hwnd=" beforeHwnd " title='" beforeTitle "'")
-
-        ; จดหน้าต่างทั้งหมดของ Reader/Acrobat ที่มีอยู่ก่อนกด Ctrl+P ไว้ก่อน - ใช้เป็นข้อมูล
-        ; ประกอบ/log เท่านั้น ไม่ใช้ตัดสินเป้าหมายส่ง Alt+U โดยตรงอีกต่อไป (ดู comment ด้านบน
+        ; จดหน้าต่างทั้งหมดของ Reader/Acrobat ที่มีอยู่ก่อนกด Ctrl+P ไว้ก่อน - ใช้แค่ประกอบการรอ
+        ; ให้ dialog/panel ใหม่เปิดเสร็จ ไม่ใช้ตัดสินเป้าหมายส่ง Alt+U โดยตรง (ดู comment ด้านบน
         ; ฟังก์ชันสำหรับเหตุผลเต็ม)
         existing := WinGetList("ahk_group AcrobatApps")
-        SC019_Log("Snapshot AcrobatApps windows before Ctrl+P: count=" existing.Length)
 
-        SC019_Log("Send: Ctrl down")
         Send("{Ctrl down}")
         Sleep(15)
-        SC019_Log("Send: p down")
         Send("{p down}")
         Sleep(15)
-        SC019_Log("Send: p up")
         Send("{p up}")
         Sleep(15)
-        SC019_Log("Send: Ctrl up")
         Send("{Ctrl up}")
 
         ; ตรวจสอบว่า Ctrl ถูกปล่อยจริงตามฟิสิคัลก่อนไปขั้นต่อไป (ไม่ใช่แค่เชื่อว่า Send("{Ctrl up}") พอ)
         Loop 10 {
             if !GetKeyState("Ctrl", "P")
                 break
-            SC019_Log("WARNING: Ctrl still physically down, forcing release (attempt " A_Index ")")
             Send("{LCtrl up}{RCtrl up}")
             Sleep(20)
         }
-        SC019_Log("Ctrl physical down-state after release loop: " GetKeyState("Ctrl", "P"))
 
-        ; รอหน้าต่างใหม่ (ถ้ามี) เพื่อ log ประกอบเท่านั้น
+        ; รอหน้าต่างใหม่ (ถ้ามี) เพื่อให้เวลา dialog/panel render เสร็จก่อนค่อยส่ง Alt+U ต่อ
         dlgHwnd := 0
         start := A_TickCount
         while (A_TickCount - start < 4000) {
@@ -429,33 +404,15 @@ SC019_DoPrint() {
             Sleep(30)
         }
 
-        if dlgHwnd {
-            try
-                dlgTitle := WinGetTitle("ahk_id " dlgHwnd)
-            catch
-                dlgTitle := "?"
-            try
-                dlgClass := WinGetClass("ahk_id " dlgHwnd)
-            catch
-                dlgClass := "?"
-            SC019_Log("Diff found NEW window: hwnd=" dlgHwnd " title='" dlgTitle "' class='" dlgClass "'")
+        if dlgHwnd
             WinWaitActive("ahk_id " dlgHwnd, , 2)
-        } else {
-            SC019_Log("Diff found no NEW window within 4000ms (likely in-place panel, or dialog opened+closed too fast to diff) - will rely on foreground window instead")
-        }
 
         Sleep(150)  ; กันกรณี control ภายในยัง render ไม่เสร็จแม้หน้าต่าง active แล้ว
 
         ; เป้าหมายจริงที่ใช้ส่ง Alt+U เสมอ: foreground window ณ ตอนนี้ ไม่ใช่ผลจาก diff โดยตรง
         sendTarget := WinExist("A")
-        try
-            targetTitle := WinGetTitle("ahk_id " sendTarget)
-        catch
-            targetTitle := "?"
-        SC019_Log("Foreground window right before Alt+U: hwnd=" sendTarget " title='" targetTitle "'")
 
         if !sendTarget {
-            SC019_Log("ERROR: no foreground window found at all - aborting")
             MsgBox("เปิดหน้าต่าง Print ไม่สำเร็จ (ไม่พบหน้าต่างเป้าหมายเลย)")
             return
         }
@@ -465,33 +422,23 @@ SC019_DoPrint() {
         focusedCtrl := ""
         try
             focusedCtrl := ControlGetFocus("ahk_id " sendTarget)
-        catch as e
-            SC019_Log("ControlGetFocus failed: " e.Message)
 
         focusedHwnd := 0
         if focusedCtrl {
             try
                 focusedHwnd := ControlGetHwnd(focusedCtrl, "ahk_id " sendTarget)
-            catch as e
-                SC019_Log("ControlGetHwnd failed: " e.Message)
         }
-        SC019_Log("Focused control inside target: '" focusedCtrl "' hwnd=" focusedHwnd)
 
-        SC019_Log("Send: WM_SYSCHAR 'U'(0x55) -> target hwnd=" sendTarget)
-        r1 := PostMessage(0x106, 0x55, 0, , sendTarget)
-        SC019_Log("PostMessage(target) result=" r1 " A_LastError=" A_LastError)
+        PostMessage(0x106, 0x55, 0, , sendTarget)
 
         if (focusedHwnd && focusedHwnd != sendTarget) {
             Sleep(30)
-            SC019_Log("Send: WM_SYSCHAR 'U'(0x55) -> focused control hwnd=" focusedHwnd " (secondary attempt)")
-            r2 := PostMessage(0x106, 0x55, 0, , focusedHwnd)
-            SC019_Log("PostMessage(focusedControl) result=" r2 " A_LastError=" A_LastError)
+            PostMessage(0x106, 0x55, 0, , focusedHwnd)
         }
 
         ; หยุดอยู่ตรงนี้ตามที่ผู้ใช้ต้องการ - ห้ามกด Enter/คลิกปุ่ม Print ให้อัตโนมัติเด็ดขาด ผู้ใช้จะ
         ; กดยืนยันพิมพ์เองที่หน้าต่าง Print โดยตรง จึงไม่มี toast "พิมพ์แล้ว" ตรงนี้ด้วย เพราะยังไม่ได้
         ; พิมพ์จริง ๆ (รอผู้ใช้กด Print/Enter เองก่อน)
-        SC019_Log("========== SC019_DoPrint END ==========")
     } finally {
         Send("{LCtrl up}{RCtrl up}{LShift up}{RShift up}{LAlt up}{RAlt up}")
     }
