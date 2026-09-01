@@ -7,6 +7,7 @@
 ; ============================================
 #Include "secret.ahk"   ; ต้องมาก่อน
 #Include "Lib\OCR.ahk"  ; ใช้โดย mod_Hotkeys.ahk (F6 double-press OCR)
+#Include "mod_HotkeyTiming.ahk"  ; รวมค่าดีเลย์ 1/2/3 ครั้งของทุกปุ่มไว้ที่เดียว
 
 #Include "mod_ToolboxGui.ahk"
 #Include "mod_CheckIn.ahk"
