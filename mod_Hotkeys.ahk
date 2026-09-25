@@ -389,24 +389,42 @@ F10_SetDisableCad() {
     }
 }
 
+; F11: หุบ/แสดงหน้าต่าง Notepad ทั้งหมดพร้อมกันทีเดียว (ไม่ใช่แค่หน้าต่างเดียว) - คล้ายปุ่ม Ins
+; ที่ซ่อน/แสดง Chrome ในไฟล์นี้ แต่ต่างกันตรงที่ Ins จัดการแค่หน้าต่างเดียว ส่วน F11 ต้องจัดการ
+; หน้าต่าง Notepad ทุกบานพร้อมกันเป็นกลุ่มเดียว (เช่น ตอนเปิดคอมมีทั้ง Ready.txt กับ Notepad
+; เปล่าเปิดค้างไว้ 2 หน้าต่าง - กด F11 ต้องหุบ/แสดงพร้อมกันทั้งคู่)
+;
+; หลักการ: เช็คว่ามีหน้าต่าง Notepad บานไหน "ไม่ minimize" อยู่บ้างไหม
+;   - มี (อย่างน้อย 1 บาน) -> หุบ (minimize) ทุกบานพร้อมกัน
+;   - ไม่มีเลย (ทุกบาน minimize อยู่หมด) -> แสดง (restore) ทุกบานพร้อมกัน
+; ถ้าไม่มีหน้าต่าง Notepad เปิดอยู่เลย ไม่ทำอะไร (ปุ่มนี้ไว้หุบ/แสดงของที่เปิดอยู่แล้วเท่านั้น
+; ไม่ได้ไว้เปิด Notepad ใหม่)
 F11:: {
-    static lastWin := 0
-
-    if (lastWin = 0) {
-        hwnd := WinExist("A")
-        if !hwnd
-            return
-
-        lastWin := hwnd
-        WinMinimize "ahk_id " hwnd
+    windows := WinGetList("ahk_exe notepad.exe")
+    if !windows.Length
         return
+
+    anyVisible := false
+    for hwnd in windows {
+        try {
+            if (WinGetMinMax("ahk_id " hwnd) != -1) {
+                anyVisible := true
+                break
+            }
+        }
     }
 
-    if WinExist("ahk_id " lastWin) {
-        WinRestore  "ahk_id " lastWin
-        WinActivate "ahk_id " lastWin
+    if anyVisible {
+        for hwnd in windows
+            try WinMinimize("ahk_id " hwnd)
+    } else {
+        for hwnd in windows {
+            try {
+                WinRestore("ahk_id " hwnd)
+                WinActivate("ahk_id " hwnd)
+            }
+        }
     }
-    lastWin := 0
 }
 
 ; ===== Globals =====
