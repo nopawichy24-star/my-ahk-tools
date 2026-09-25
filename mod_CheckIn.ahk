@@ -9,17 +9,18 @@ global g_BrutalEnabled := false
 ;----------------------------------------
 ; INIT
 ;----------------------------------------
+; ตอนเปิดคอมครั้งแรก: เรียงลำดับเปิดโปรแกรมทีละขั้น (Startup_Sequence) แทนที่จะยิงหลาย timer
+; พร้อมกันแบบเดิม - สาเหตุที่ต้องเรียงลำดับ: ของเดิมยิง LaunchApps (เปิด Outlook + Chrome) กับ
+; DoCheckIn (เปิดเว็บล็อกอิน แล้วพิมพ์ username/password ด้วย SendText) เป็นคนละ timer พร้อมกัน
+; ถ้า Outlook/Chrome ที่ยังเปิดช้าอยู่ดันแย่ง focus ไปพอดีตอน DoCheckIn กำลังพิมพ์รหัสผ่าน
+; ตัวอักษรจะหลุดไปที่หน้าต่างอื่นแทน ทำให้ล็อกอินไม่สำเร็จ - ดูรายละเอียดลำดับที่ Startup_Sequence
+; ด้านล่าง
 CheckIn_Init() {
 
     SetTimer(CheckAutoCheckIn, 1000)
-    SetTimer(LaunchApps, -1500)
-  
-    if !IsWorkTime() {
-        SetTimer(() => DoCheckIn(true), -3000)
-    }
-}
+    SetTimer(Startup_Sequence, -1500)
 
-CheckIn_Init()
+}
 
 ;----------------------------------------
 ; 🕒 CHECK WORK TIME
@@ -132,39 +133,77 @@ DoCheckIn(force := false) {
 
 
 ;----------------------------------------
-; AUTO START APPS
+; STARTUP SEQUENCE (เรียงลำดับเปิดโปรแกรมตอนเปิดคอมครั้งแรก)
 ;----------------------------------------
-LaunchApps() {
+; ลำดับตามที่ต้องการ:
+;   1. เปิดเมล (Outlook) รอจนพร้อมแล้ว maximize เป็นหน้าจอใหญ่
+;   2. เปิดเว็บ (Chrome incognito: ChatGPT/Claude/Google Translate)
+;   3. เปิดไฟล์ Ready.txt (นี่คือ "โน้ตแพด" ที่ต้องเปิด - ไม่มีการเปิด Notepad เปล่าเพิ่มอีก)
+;   4. ถ้าไม่ใช่เวลางาน (IsWorkTime) เปิดเว็บที่ต้องล็อกอินเป็นลำดับสุดท้ายสุด แล้วพิมพ์ล็อกอินให้
+;      (DoCheckIn - logic เดิมไม่เปลี่ยนแปลงเลย) ต้องเปิดทีหลังสุดเสมอ เพื่อไม่ให้มีหน้าต่างอื่น
+;      มาแย่ง focus ไปจากตอนกำลังพิมพ์ username/password
+;
+; แต่ละขั้นรอให้หน้าต่างของตัวเองพร้อมก่อนค่อยไปขั้นถัดไป (ไม่ยิงพร้อมกันแบบเดิม) แต่ถ้าขั้นไหน
+; เปิดไม่สำเร็จ/ช้าเกินไป จะข้ามไปขั้นถัดไปแทนที่จะค้างรอทั้งสายไปเลย
+;
+; ทุกขั้นเช็คก่อนว่าโปรแกรม/ไฟล์นั้นเปิดอยู่แล้วหรือยัง ถ้าเปิดอยู่แล้วจะไม่เปิดซ้ำ (เผื่อกรณี
+; รันสคริปต์ใหม่ทั้งที่บางโปรแกรมยังเปิดค้างอยู่จากรอบก่อน)
+Startup_Sequence() {
+    Startup_OpenMail()
+    Startup_OpenWebsites()
+    Startup_OpenReadyTxt()
 
+    if !IsWorkTime()
+        DoCheckIn(true)
+}
+
+Startup_OpenMail() {
     if !WinExist("ahk_exe OUTLOOK.EXE") {
-
         Run("outlook.exe")
-
-        if WinWait("ahk_exe OUTLOOK.EXE", , 10000)
-            WinActivate("ahk_exe OUTLOOK.EXE")
-
-    } else {
-
-        WinActivate("ahk_exe OUTLOOK.EXE")
-
+        if !WinWait("ahk_exe OUTLOOK.EXE", , 15)
+            return  ; เปิดไม่สำเร็จ/ช้าเกินไป - ปล่อยให้ขั้นถัดไปทำต่อ ไม่ค้างรอทั้งสาย
     }
 
-    if !WinExist("ahk_exe chrome.exe") {
+    WinActivate("ahk_exe OUTLOOK.EXE")
+    WinMaximize("ahk_exe OUTLOOK.EXE")
+    Sleep(500)
+}
 
-        chrome := "C:\Program Files\Google\Chrome\Application\chrome.exe"
+Startup_OpenWebsites() {
+    if WinExist("ahk_exe chrome.exe")
+        return  ; เปิดอยู่แล้ว ไม่ต้องเปิดซ้ำ
 
-        if !FileExist(chrome)
-            chrome := "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
+    chrome := "C:\Program Files\Google\Chrome\Application\chrome.exe"
 
-        if FileExist(chrome) {
+    if !FileExist(chrome)
+        chrome := "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
 
-            url1 := "https://chatgpt.com/auth/login"
-            url2 := "https://claude.ai/login"
-            url3 := "https://translate.google.com/"
+    if !FileExist(chrome)
+        return
 
-            Run('"' chrome '" --incognito "' url1 '" "' url2 '" "' url3 '"')
-        }
-    }
+    url1 := "https://chatgpt.com/auth/login"
+    url2 := "https://claude.ai/login"
+    url3 := "https://translate.google.com/"
+
+    Run('"' chrome '" --incognito "' url1 '" "' url2 '" "' url3 '"')
+    WinWait("ahk_exe chrome.exe", , 15)
+    Sleep(500)
+}
+
+Startup_OpenReadyTxt() {
+    path := "C:\Users\U004797\Desktop\PS\Ready.txt"
+
+    if !FileExist(path)
+        return
+
+    ; เช็คก่อนว่ามีหน้าต่าง Notepad ที่เปิดไฟล์นี้อยู่แล้วหรือยัง (จับจากชื่อหน้าต่างที่มีคำว่า
+    ; "Ready.txt" อยู่ + เป็น process notepad.exe) กันเปิดซ้ำเป็นหน้าต่างที่สองถ้ารันสคริปต์ใหม่
+    ; ทั้งที่ไฟล์นี้ยังเปิดค้างอยู่จากรอบก่อน
+    if WinExist("Ready.txt ahk_exe notepad.exe")
+        return
+
+    Run(path)
+    Sleep(300)
 }
 
 
