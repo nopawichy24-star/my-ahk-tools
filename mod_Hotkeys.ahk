@@ -395,11 +395,27 @@ F10_SetDisableCad() {
 ; Ready.txt ที่เปิดไว้ตอนเปิดคอม - กด F11 ต้องหุบ/แสดงพร้อมกันทั้งคู่ ไม่ใช่แค่บานใดบานหนึ่ง)
 ;
 ; หลักการ: เช็คว่ามีหน้าต่าง Notepad บานไหน "ไม่ minimize" อยู่บ้างไหม
-;   - มี (อย่างน้อย 1 บาน) -> หุบ (minimize) ทุกบานพร้อมกัน
-;   - ไม่มีเลย (ทุกบาน minimize อยู่หมด) -> แสดง (restore) ทุกบานพร้อมกัน
+;   - มี (อย่างน้อย 1 บาน) -> จำหน้าต่างที่ active อยู่ตอนนี้ไว้ก่อน แล้วหุบ (minimize) ทุกบานพร้อมกัน
+;   - ไม่มีเลย (ทุกบาน minimize อยู่หมด) -> แสดง (restore) ทุกบานพร้อมกัน แล้ว activate เฉพาะบาน
+;     ที่จำไว้ตอนหุบเท่านั้น
 ; ถ้าไม่มีหน้าต่าง Notepad เปิดอยู่เลย ไม่ทำอะไร (ปุ่มนี้ไว้หุบ/แสดงของที่เปิดอยู่แล้วเท่านั้น
 ; ไม่ได้ไว้เปิด Notepad ใหม่)
+;
+; บั๊กที่แก้: เดิมตอนแสดงกลับ (restore) โค้ดวน WinActivate ทุกบานในลูปเดียวกัน ทำให้บานสุดท้าย
+; ในลิสต์ "ชนะ" ทับบานอื่นเสมอ (WinActivate ครั้งหลังสุดคือตัวที่ได้ focus จริง) ซึ่งอาจไม่ใช่บาน
+; ที่ผู้ใช้กำลังพิมพ์อยู่ก่อนกด F11 หุบ ทำให้พิมพ์ต่อแล้วตัวอักษรไปโผล่ผิดบาน/ผิดแท็บ - แก้โดยจำ
+; hwnd ของบานที่ active อยู่ตอนกำลังจะหุบไว้ก่อนเสมอ แล้วตอน restore ค่อย activate เจาะจงแค่
+; บานนั้นบานเดียว (ยังคง restore ให้แสดงครบทุกบานเหมือนเดิม แค่ไม่ไป activate วนทุกบาน)
+;
+; หมายเหตุ: ถ้าที่เห็นเป็น "2 แท็บ" ภายในหน้าต่าง Notepad เดียวกัน (ไม่ใช่ 2 หน้าต่างแยกกัน -
+; Notepad รุ่นใหม่ของ Windows 11 รวมหลายไฟล์เป็นแท็บในหน้าต่างเดียวได้) การแก้นี้จะไม่มีผลกับ
+; แท็บที่เลือกอยู่ภายในหน้าต่างเดียวกันเลย เพราะ AHK ควบคุมได้แค่ระดับหน้าต่าง (hwnd) ไม่เห็น/ไม่
+; ควบคุมแท็บภายในแอปได้โดยตรง - รบกวนทดสอบแล้วแจ้งด้วยว่ากรณีนี้ยังเกิดอยู่ไหม ถ้ายังเกิดอยู่
+; แสดงว่าเป็นแท็บในหน้าต่างเดียวจริง ๆ ต้องหาวิธีอื่นแก้เพิ่ม (ยังไม่มีเครื่อง Windows 11 Notepad
+; จริงให้ทดสอบยืนยันในตอนนี้)
 F11:: {
+    static lastActiveHwnd := 0
+
     windows := WinGetList("ahk_exe notepad.exe")
     if !windows.Length
         return
@@ -415,15 +431,33 @@ F11:: {
     }
 
     if anyVisible {
+        try {
+            curActive := WinExist("A")
+            for hwnd in windows {
+                if (hwnd = curActive) {
+                    lastActiveHwnd := curActive
+                    break
+                }
+            }
+        }
+
         for hwnd in windows
             try WinMinimize("ahk_id " hwnd)
     } else {
+        for hwnd in windows
+            try WinRestore("ahk_id " hwnd)
+
+        target := 0
         for hwnd in windows {
-            try {
-                WinRestore("ahk_id " hwnd)
-                WinActivate("ahk_id " hwnd)
+            if (hwnd = lastActiveHwnd) {
+                target := hwnd
+                break
             }
         }
+        if !target
+            target := windows[1]
+
+        try WinActivate("ahk_id " target)
     }
 }
 
